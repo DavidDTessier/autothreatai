@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AutoThreat AI - Agentic Threat Modeling</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+           <link rel="stylesheet" href="/static/css/style.css?v=5">
+</head>
+<body>
+    <div class="container">
+        <header class="hero-header">
+            <div class="logo-container">
+                <div class="logo">
+                    <svg class="logo-icon" viewBox="0 0 100 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M50 0L95 20V60C95 85 75 105 50 120C25 105 5 85 5 60V20L50 0Z" fill="#1A202C" stroke="#FF4D4D" stroke-width="3"/>
+                        <path d="M50 20L80 35V60C80 75 65 90 50 100C35 90 20 75 20 60V35L50 20Z" fill="#111" stroke="#FF4D4D" stroke-width="2"/>
+                        <path d="M50 35L55 55H65L45 85L50 65H40L50 35Z" fill="#FF4D4D"/>
+                    </svg>
+                    <span class="logo-text">AUTO<span class="highlight">THREAT</span> AI</span>
+                </div>
+            </div>
+            <h1 class="hero-title">
+                Architecting Resilience<br>
+                at the <span class="gradient-text">Speed of Thought</span>
+            </h1>
+            <p class="hero-subtitle">
+                Agentic threat modeling for the autonomous enterprise.<br>
+                Security that moves as fast as you do.
+            </p>
+        </header>
+
+        <div class="main-content">
+            <!-- Input Section -->
+            <section class="input-section">
+                <div class="input-container">
+                    <label for="architecture-input">Enter Architecture Description:</label>
+                    <textarea 
+                        id="architecture-input" 
+                        placeholder="Describe your system architecture, components, data flows, and security requirements..."
+                        rows="8"
+                    ></textarea>
+                    
+                    <div class="file-upload-section">
+                        <label for="diagram-upload" class="file-upload-label">
+                            <span class="file-upload-icon">📎</span>
+                            <span class="file-upload-text">Upload Reference Diagram (Optional)</span>
+                            <input 
+                                type="file" 
+                                id="diagram-upload" 
+                                accept="image/*,.png,.jpg,.jpeg,.gif,.webp"
+                                style="display: none;"
+                            />
+                        </label>
+                        <div id="file-preview" class="file-preview" style="display: none;">
+                            <span id="file-name"></span>
+                            <button id="remove-file" class="btn-remove-file" type="button">×</button>
+                        </div>
+                    </div>
+                    
+                    <div class="button-group">
+                        <button id="analyze-btn" class="btn btn-primary">
+                            <span class="btn-icon">🚀</span>
+                            <span class="btn-text">Start Analysis</span>
+                        </button>
+                        <button id="reset-btn" class="btn btn-secondary" disabled>
+                            <span class="btn-icon">🔄</span>
+                            <span class="btn-text">Reset</span>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Agent Status Section -->
+            <section class="status-section">
+                <h2>Pipeline Status</h2>
+                <div class="agent-pipeline">
+                    <div class="agent-card" id="agent-orchestrator" data-agent="orchestrator">
+                        <div class="agent-icon">🎯</div>
+                        <div class="agent-info">
+                            <div class="agent-name">Orchestrator</div>
+                            <div class="agent-status">Waiting</div>
+                        </div>
+                        <div class="agent-indicator"></div>
+                    </div>
+                    
+                    <div class="pipeline-arrow">→</div>
+                    
+                    <div class="agent-card" id="agent-parser" data-agent="parser">
+                        <div class="agent-icon">🔍</div>
+                        <div class="agent-info">
+                            <div class="agent-name">Architecture Parser</div>
+                            <div class="agent-status">Waiting</div>
+                        </div>
+                        <div class="agent-indicator"></div>
+                    </div>
+                    
+                    <div class="pipeline-arrow">→</div>
+                    
+                    <div class="agent-card" id="agent-modeler" data-agent="modeler">
+                        <div class="agent-icon">🛡️</div>
+                        <div class="agent-info">
+                            <div class="agent-name">Threat Modeler</div>
+                            <div class="agent-status">Waiting</div>
+                        </div>
+                        <div class="agent-indicator"></div>
+                    </div>
+                    
+                    <div class="pipeline-arrow">→</div>
+                    
+                    <div class="agent-card" id="agent-builder" data-agent="builder">
+                        <div class="agent-icon">📝</div>
+                        <div class="agent-info">
+                            <div class="agent-name">Report Builder</div>
+                            <div class="agent-status">Waiting</div>
+                        </div>
+                        <div class="agent-indicator"></div>
+                    </div>
+                    
+                    <div class="pipeline-arrow">→</div>
+                    
+                    <div class="agent-card" id="agent-verifier" data-agent="verifier">
+                        <div class="agent-icon">✅</div>
+                        <div class="agent-info">
+                            <div class="agent-name">Report Verifier</div>
+                            <div class="agent-status">Waiting</div>
+                        </div>
+                        <div class="agent-indicator"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Report Section -->
+            <section class="report-section">
+                <div class="report-header">
+                    <h2>Security Threat Report</h2>
+                    <div class="report-actions">
+                        <button id="download-btn" class="btn btn-download" disabled>
+                            <span class="btn-icon">📥</span>
+                            <span class="btn-text">Download PDF Report</span>
+                        </button>
+                    </div>
+                </div>
+                <div id="report-content" class="report-content">
+                    <div class="placeholder">
+                        <div class="placeholder-icon">📄</div>
+                        <div class="placeholder-text">Your security threat report will appear here...</div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <!-- Balloon container for celebration animation -->
+    <div id="balloon-container" class="balloon-container"></div>
+
+    <script src="/static/js/main.js"></script>
+</body>
+</html>

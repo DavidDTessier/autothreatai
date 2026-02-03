@@ -1,0 +1,26 @@
+
+System Architecture:
+- Client: Web Browser / Mobile App
+- CDN: Cloudflare (WAF/DDoS protection)
+- Load Balancer: Nginx (HTTPS Termination)
+- Auth Service: Keycloak (OIDC/OAuth2)
+- App Server: Python FastAPI (Microservices)
+- Background Tasks: Celery / RabbitMQ
+- Primary Database: MySQL 8.0 (Encrypted at rest)
+- Cache/Session: Redis Cluster
+- File Storage: AWS S3 (Private buckets)
+- Logging: ELK Stack (Elasticsearch, Logstash, Kibana)
+- Monitoring: Prometheus / Grafana
+
+Data Flow:
+1. User requests routed through Cloudflare CDN to Nginx.
+2. Nginx validates SSL and forwards to FastAPI.
+3. FastAPI authenticates via Keycloak.
+4. FastAPI reads/writes to MySQL and Redis.
+5. Async tasks pushed to RabbitMQ for processing by Celery.
+6. Files uploaded directly to S3 via pre-signed URLs.
+7. System logs shipped to ELK; Metrics scraped by Prometheus.
+Trust Boundaries:
+- Boundary A: Public Internet vs. WAF/CDN
+- Boundary B: DMZ (Nginx/WAF) vs. Internal Network
+- Boundary C: Internal Application Layer vs. Data Layer (MySQL/S3/Redis)
