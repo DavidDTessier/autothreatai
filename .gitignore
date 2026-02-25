@@ -11,5 +11,10 @@ __pycache__/
 .adk/
 /reports/*
 /logs/*
+/uploads/*
 
 _agent_wrapper_*.py
+
+# Svelte frontend
+app/frontend-svelte/node_modules/
+app/frontend-svelte/dist/

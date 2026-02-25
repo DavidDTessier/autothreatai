@@ -20,12 +20,12 @@ import time
 from pathlib import Path
 from typing import List, Optional
 
+from dotenv import load_dotenv
+
 # Add project root to path
 project_root = Path(__file__).parent.absolute()
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
-
-from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
@@ -53,7 +53,7 @@ AGENTS = [
     },
     {
         "name": "Report Content Builder",
-        "dir": "agents/report_content_builder",
+        "dir": "agents/report_builder",
         "port": 8003,
         "a2a": True,
     },
@@ -198,7 +198,31 @@ try:
 except ImportError:
     pass
 '''
-    
+
+    # All agents: add set-api-key so server can set API key / Vertex / model (ADK uses env)
+    set_api_key_extra = '''
+# Allow server to set API key / Vertex / model from frontend (ADK uses env)
+import os
+from fastapi import Request
+@app.post("/set-api-key")
+async def set_api_key(request: Request):
+    body = await request.json()
+    api_key = (body.get("api_key") or "").strip()
+    if api_key:
+        os.environ["GOOGLE_API_KEY"] = api_key
+    if body.get("use_vertex"):
+        os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "True"
+        if body.get("vertex_project"):
+            os.environ["GOOGLE_CLOUD_PROJECT"] = body["vertex_project"]
+        if body.get("vertex_location"):
+            os.environ["GOOGLE_CLOUD_LOCATION"] = body["vertex_location"]
+    model_id = (body.get("model_id") or "").strip()
+    if model_id:
+        os.environ["GOOGLE_GENAI_MODEL"] = model_id
+    return {"ok": True}
+'''
+    wrapper_module_content = wrapper_module_content.rstrip() + set_api_key_extra + "\n"
+
     # Write the wrapper module to a temp file
     wrapper_file = project_root / "app" / f"_agent_wrapper_{agent_name}.py"
     wrapper_file.write_text(wrapper_module_content)
@@ -251,20 +275,51 @@ except ImportError:
         return None
 
 
+def build_svelte_frontend() -> bool:
+    """Build the Svelte frontend (npm install + npm run build). Returns True if build succeeded or skipped."""
+    svelte_dir = project_root / "app" / "frontend-svelte"
+    package_json = svelte_dir / "package.json"
+    if not package_json.exists():
+        logger.info("Svelte frontend not present (no package.json), skipping build")
+        return True
+
+    logger.info("Building Svelte frontend in %s...", svelte_dir)
+    try:
+        for cmd, desc in [
+            (["yarn", "install"], "yarn install"),
+            (["yarn", "run", "build"], "yarn run build"),
+        ]:
+            result = subprocess.run(
+                cmd,
+                cwd=str(svelte_dir),
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            if result.returncode != 0:
+                logger.error("%s failed (exit %s)", desc, result.returncode)
+                if result.stderr:
+                    logger.error("stderr: %s", result.stderr[-2000:])
+                if result.stdout:
+                    logger.error("stdout: %s", result.stdout[-2000:])
+                return False
+        dist_index = svelte_dir / "dist" / "index.html"
+        if dist_index.exists():
+            logger.info("Svelte frontend built successfully (dist/index.html ready)")
+        return True
+    except (subprocess.TimeoutExpired, OSError, ValueError) as e:
+        logger.warning("Svelte build failed: %s. Server may start without frontend.", e)
+        return True  # Continue anyway
+
+
 def check_frontend_exists() -> bool:
-    """Check if the frontend directory exists."""
-    frontend_dir = project_root / "app" / "frontend"
-    if not frontend_dir.exists():
-        logger.warning("Frontend directory not found: %s", frontend_dir)
-        return False
-    
-    index_file = frontend_dir / "index.html"
-    if not index_file.exists():
-        logger.warning("Frontend index.html not found: %s", index_file)
-        return False
-    
-    logger.info("Frontend directory found: %s", frontend_dir)
-    return True
+    """Check if the Svelte frontend is built (app/frontend-svelte/dist)."""
+    svelte_dist = project_root / "app" / "frontend-svelte" / "dist" / "index.html"
+    if svelte_dist.exists():
+        logger.info("Svelte frontend found: %s", svelte_dist.parent)
+        return True
+    logger.warning("Svelte frontend not built. Run: cd app/frontend-svelte && npm install && npm run build")
+    return False
 
 
 def start_fastapi_app() -> Optional[subprocess.Popen]:
@@ -280,10 +335,12 @@ def start_fastapi_app() -> Optional[subprocess.Popen]:
         logger.error("server.py not found: %s", server_py)
         return None
     
-    # Check if frontend exists
+    # Check if Svelte frontend is built
     frontend_exists = check_frontend_exists()
     if not frontend_exists:
         logger.warning("Frontend not found, but continuing with API server...")
+    else:
+        logger.info("Serving Svelte frontend from app/frontend-svelte/dist")
     
     # Check if port is available
     try:
@@ -480,8 +537,12 @@ def main():
         logger.warning("Only %d of 4 sub-agents are running. Continuing anyway...", agents_running)
     else:
         logger.info("✓ All 4 sub-agents are running")
-    
-    # Start FastAPI app with frontend
+
+    # Rebuild Svelte frontend before starting the FastAPI server (so http://localhost:8000 serves latest build)
+    logger.info("Rebuilding Svelte frontend before starting server...")
+    build_svelte_frontend()
+
+    # Start FastAPI app with frontend (serves Svelte from dist/ if present, else legacy)
     app_process = start_fastapi_app()
     if app_process:
         processes.append(app_process)
@@ -503,8 +564,8 @@ def main():
     logger.info("  Orchestrator:            http://localhost:8005")
     logger.info("")
     logger.info("Frontend & API:")
-    logger.info("  🌐 Frontend UI:          http://localhost:8000")
-    logger.info("  📡 API Health:            http://localhost:8000/api/health")
+    logger.info("  🌐 Frontend UI (Svelte): http://localhost:8000")
+    logger.info("  📡 API Health:           http://localhost:8000/api/health")
     logger.info("")
     logger.info("Press Ctrl+C to stop all services.")
     logger.info("=" * 60)

@@ -1,3 +1,5 @@
+"""File Writer Tool"""
+
 import datetime
 import logging
 import os
@@ -28,13 +30,13 @@ def write_file(content: str) -> dict:
         with open(file_path, 'w', encoding='utf-8') as f:
             f.write(content)
         
-        logging.info(f"Successfully saved file: {file_path}")
+        logging.info("Successfully saved file: %s", file_path)
         return {
             "status": "success",
             "file_path": file_path
         }
-    except Exception as e:
-        logging.error(f"Error writing file {file_path}: {e}")
+    except (OSError, TypeError, ValueError) as e:
+        logging.error("Error writing file %s: %s", file_path, e)
         return {
             "status": "error",
             "error": str(e)
@@ -65,17 +67,17 @@ def convert_markdown_to_pdf(content: str) -> dict:
         pdf.add_section(Section(content))
         
         # Save with optimized settings
-        logging.info(f"Starting PDF conversion for {file_path}...")
+        logging.info("Starting PDF conversion for %s...", file_path)
         pdf.save(file_path)
-        logging.info(f"Successfully saved PDF: {file_path}")
+        logging.info("Successfully saved PDF: %s", file_path)
 
         return {
             "status": "success",
             "file_path": file_path
         }
-    except Exception as e:
-        logging.error(f"Error writing PDF {file_path}: {e}")
+    except (OSError, TypeError, ValueError) as e:
+        logging.error("Error writing PDF %s: %s", file_path, e)
         return {
             "status": "error",
             "error": str(e)
-        }        
+        }

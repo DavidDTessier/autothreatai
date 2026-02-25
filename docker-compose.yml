@@ -1,0 +1,124 @@
+# Run from project root: docker compose up --build
+services:
+  architecture_parser:
+    build:
+      context: .
+      dockerfile: agents/Dockerfile
+    image: autothreat-architecture_parser
+    pull_policy: never
+    environment:
+      AGENT_NAME: architecture_parser
+      PORT: "8001"
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      GOOGLE_GENAI_USE_VERTEXAI: ${GOOGLE_GENAI_USE_VERTEXAI:-}
+      GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT:-}
+      GOOGLE_CLOUD_LOCATION: ${GOOGLE_CLOUD_LOCATION:-global}
+    ports:
+      - "8001:8001"
+
+  threat_modeler:
+    build:
+      context: .
+      dockerfile: agents/Dockerfile
+    image: autothreat-threat_modeler
+    pull_policy: never
+    environment:
+      AGENT_NAME: threat_modeler
+      PORT: "8002"
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      GOOGLE_GENAI_USE_VERTEXAI: ${GOOGLE_GENAI_USE_VERTEXAI:-}
+      GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT:-}
+      GOOGLE_CLOUD_LOCATION: ${GOOGLE_CLOUD_LOCATION:-global}
+    ports:
+      - "8002:8002"
+
+  report_builder:
+    build:
+      context: .
+      dockerfile: agents/Dockerfile
+    image: autothreat-report_builder
+    pull_policy: never
+    environment:
+      AGENT_NAME: report_builder
+      PORT: "8003"
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      GOOGLE_GENAI_USE_VERTEXAI: ${GOOGLE_GENAI_USE_VERTEXAI:-}
+      GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT:-}
+      GOOGLE_CLOUD_LOCATION: ${GOOGLE_CLOUD_LOCATION:-global}
+    ports:
+      - "8003:8003"
+
+  report_verifier:
+    build:
+      context: .
+      dockerfile: agents/Dockerfile
+    image: autothreat-report_verifier
+    pull_policy: never
+    environment:
+      AGENT_NAME: report_verifier
+      PORT: "8004"
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      GOOGLE_GENAI_USE_VERTEXAI: ${GOOGLE_GENAI_USE_VERTEXAI:-}
+      GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT:-}
+      GOOGLE_CLOUD_LOCATION: ${GOOGLE_CLOUD_LOCATION:-global}
+    ports:
+      - "8004:8004"
+
+  orchestrator:
+    build:
+      context: .
+      dockerfile: agents/Dockerfile
+    image: autothreat-orchestrator
+    pull_policy: never
+    environment:
+      AGENT_NAME: orchestrator
+      PORT: "8005"
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      GOOGLE_GENAI_USE_VERTEXAI: ${GOOGLE_GENAI_USE_VERTEXAI:-}
+      GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT:-}
+      GOOGLE_CLOUD_LOCATION: ${GOOGLE_CLOUD_LOCATION:-global}
+    ports:
+      - "8005:8005"
+    depends_on:
+      - architecture_parser
+      - threat_modeler
+      - report_builder
+      - report_verifier
+    restart: unless-stopped
+
+  app:
+    build:
+      context: .
+      dockerfile: app/Dockerfile
+    image: autothreat-app
+    pull_policy: never
+    environment:
+      ORCHESTRATOR_URL: http://orchestrator:8005
+      ALLOWED_ORIGINS: http://localhost:8000,http://localhost:80
+      RUNNING_IN_CONTAINER: true
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      GOOGLE_GENAI_USE_VERTEXAI: ${GOOGLE_GENAI_USE_VERTEXAI:-}
+      GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT:-}
+      GOOGLE_CLOUD_LOCATION: ${GOOGLE_CLOUD_LOCATION:-global}
+      UPLOADS_MAX_AGE_HOURS: ${UPLOADS_MAX_AGE_HOURS:-24}
+      REPORTS_MAX_AGE_DAYS: ${REPORTS_MAX_AGE_DAYS:-7}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./uploads:/app/uploads
+      - ./reports:/app/reports
+    depends_on:
+      - orchestrator
+    restart: unless-stopped
+
+  # Optional: standalone Svelte static server (API already serves frontend on :8000)
+  frontend:
+    build:
+      context: .
+      dockerfile: app/frontend-svelte/Dockerfile
+    image: autothreat-frontend
+    pull_policy: never
+    ports:
+      - "8080:80"
+    profiles:
+      - frontend

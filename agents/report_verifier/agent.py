@@ -1,3 +1,9 @@
+"""
+Report Verifier Agent
+
+Audits the threat model report against security best practices and project requirements.
+"""
+
 import os
 from typing import Literal
 
@@ -10,7 +16,8 @@ from shared.utils.file_loader import load_instructions_file
 current_dir = os.path.dirname(os.path.abspath(__file__))
 instructions_path = os.path.join(current_dir, "instructions.txt")
 
-MODEL_NAME = "gemini-3-flash-preview"
+DEFAULT_MODEL = "gemini-3-flash-preview"
+MODEL_NAME = os.environ.get("GOOGLE_GENAI_MODEL", DEFAULT_MODEL)
 
 # Define the Schema
 class VerifierFeedback(BaseModel):
@@ -32,4 +39,4 @@ report_verifier_agent = Agent(
     disallow_transfer_to_peers=True,
 )
 
-root_agent = report_verifier_agentroot_agent = report_verifier_agent
+root_agent = report_verifier_agent
