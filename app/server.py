@@ -460,10 +460,9 @@ async def stream_query(request: QueryRequest):
                         yield f"data: {json.dumps({'error': friendly})}\n\n"
                         return
                     
-                    # Stream the response chunks - use bytes for lower latency
+                    # Stream the response chunks - small chunk_size so browser gets updates as each SSE event is sent
                     try:
-                        # Use aiter_bytes for more immediate processing (no text decoding buffering)
-                        async for chunk in response.aiter_bytes(chunk_size=1024):
+                        async for chunk in response.aiter_bytes(chunk_size=256):
                             if chunk:
                                 # Decode and yield immediately - no buffering
                                 try:

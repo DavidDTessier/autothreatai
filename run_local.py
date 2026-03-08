@@ -163,6 +163,8 @@ if str(project_root) not in sys.path:
 
 # Suppress OpenTelemetry attribute warnings for None values
 logging.getLogger("opentelemetry.attributes").setLevel(logging.ERROR)
+# Suppress google_genai "non-text parts (function_call)" warning; ADK handles tool calls.
+logging.getLogger("google_genai.types").setLevel(logging.ERROR)
 
 from google.adk.cli import fast_api
 from starlette.middleware.base import BaseHTTPMiddleware

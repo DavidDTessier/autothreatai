@@ -103,22 +103,20 @@ export async function streamQuery(
     const { done, value } = await reader.read();
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
-    let idx;
-    while ((idx = buffer.indexOf('\n')) >= 0) {
-      const line = buffer.slice(0, idx).trim();
-      buffer = buffer.slice(idx + 1);
-      if (line.startsWith('data: ')) {
-        const jsonStr = line.slice(6);
-        if (jsonStr) {
-          try {
-            const event = JSON.parse(jsonStr);
-            onChunk(event);
-            if (event && typeof event.error === 'string') throw new Error(event.error);
-          } catch (e) {
-            if (e instanceof SyntaxError) continue;
-            throw e;
-          }
-        }
+    while (buffer.includes('\n\n')) {
+      const end = buffer.indexOf('\n\n');
+      const message = buffer.slice(0, end);
+      buffer = buffer.slice(end + 2);
+      const dataLines = message.split('\n').filter((ln) => ln.startsWith('data: '));
+      const jsonStr = dataLines.map((ln) => ln.slice(6)).join('\n').trim();
+      if (!jsonStr) continue;
+      try {
+        const event = JSON.parse(jsonStr);
+        onChunk(event);
+        if (event && typeof event.error === 'string') throw new Error(event.error);
+      } catch (e) {
+        if (e instanceof SyntaxError) continue;
+        throw e;
       }
     }
   }

@@ -14,7 +14,7 @@ from shared.utils.file_loader import load_instructions_file
 
 # Resolve paths relative to this file's directory
 current_dir = os.path.dirname(os.path.abspath(__file__))
-instructions_path = os.path.join(current_dir, "instructions.txt")
+instructions_path = os.path.join(current_dir, "instructions.yaml")
 
 DEFAULT_MODEL = "gemini-3-flash-preview"
 MODEL_NAME = os.environ.get("GOOGLE_GENAI_MODEL", DEFAULT_MODEL)

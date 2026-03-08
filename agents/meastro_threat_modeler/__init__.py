@@ -22,7 +22,7 @@ import google.auth
 sys.path.insert(0, os.path.dirname(__file__))
 
 # Add the project root to the path so that 'shared' module can be imported
-# The project root is two levels up from this file (agents/orchestrator/__init__.py)
+# The project root is two levels up from this file (agents/threat_modeler/__init__.py)
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
@@ -33,9 +33,6 @@ os.environ["ADK_SUPPRESS_EXPERIMENTAL_FEATURE_WARNINGS"] = "True"
 # Suppress OpenTelemetry attribute warnings for None values
 # These occur when usage metrics are not available (e.g., input_tokens is None)
 logging.getLogger("opentelemetry.attributes").setLevel(logging.ERROR)
-# Suppress "non-text parts in the response: ['function_call']" warning from google_genai
-# when the model returns tool/function calls; ADK handles these via content.parts.
-logging.getLogger("google_genai.types").setLevel(logging.ERROR)
 # Use default project from credentials if not in .env
 try:
     _, project_id = google.auth.default()

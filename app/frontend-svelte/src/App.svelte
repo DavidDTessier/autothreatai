@@ -1,9 +1,10 @@
 <script>
+  import { get } from 'svelte/store';
+  import { writable } from 'svelte/store';
   import Header from './components/Header.svelte';
   import InputSection from './components/InputSection.svelte';
   import AgentPipeline from './components/AgentPipeline.svelte';
   import ReportSection from './components/ReportSection.svelte';
-  import Balloons from './components/Balloons.svelte';
   import {
     getConfig,
     createSession,
@@ -15,6 +16,7 @@
   } from './lib/api.js';
   import {
     AGENT_SEQUENCE,
+    NEXT_AGENT_IDS,
     getAgentIdFromAuthor,
   } from './lib/agents.js';
   import { markdownToSafeHtml } from './lib/sanitize.js';
@@ -69,78 +71,104 @@
   let abortController = null;
   let fullReport = '';
   let reportHtml = '';
-  let agentStatuses = {};
+  const initialStatuses = {
+    orchestrator: 'waiting',
+    parser: 'waiting',
+    modeler: 'waiting',
+    ai_modeler: 'waiting',
+    builder: 'waiting',
+    verifier: 'waiting',
+  };
+  const agentStatusesStore = writable(initialStatuses);
   let isAnalyzing = false;
   let canReset = false;
   let canDownload = false;
   let errorMessage = '';
-  let showBalloons = false;
-
-  $: agentStatusesReactive = agentStatuses;
 
   function resetAgentStatuses() {
-    agentStatuses = { orchestrator: 'waiting', parser: 'waiting', modeler: 'waiting', builder: 'waiting', verifier: 'waiting' };
+    agentStatusesStore.set({ ...initialStatuses });
   }
 
-  function setAgentStatus(agentId, status, message = null) {
-    agentStatuses = {
-      ...agentStatuses,
-      [agentId]: status,
-    };
+  function setAgentStatus(agentId, status) {
+    agentStatusesStore.update((s) => ({ ...s, [agentId]: status }));
+  }
+
+  function getAgentStatus(agentId) {
+    return get(agentStatusesStore)[agentId];
+  }
+
+  /** Normalize ADK event (backend may send snake_case). */
+  function normEvent(ev) {
+    if (!ev) return ev;
+    const author = ev.author ?? ev.Author;
+    const finishReason = ev.finishReason ?? ev.finish_reason;
+    const turnComplete = ev.turn_complete ?? ev.turnComplete;
+    const partial = ev.partial;
+    const actions = ev.actions ?? {};
+    const toolCalls = actions.toolCalls ?? actions.tool_calls ?? [];
+    return { author, finishReason, turnComplete, partial, actions: { ...actions, toolCalls }, content: ev.content };
   }
 
   function processStreamEvent(event) {
     if (event && typeof event.error === 'string') {
       errorMessage = userFriendlyError(event.error);
       AGENT_SEQUENCE.forEach((id) => {
-        if (agentStatuses[id] !== 'completed') setAgentStatus(id, 'error');
+        if (getAgentStatus(id) !== 'completed') setAgentStatus(id, 'error');
       });
       return;
     }
-    if (event.author) {
-      let agentId = getAgentIdFromAuthor(event.author);
+    const e = normEvent(event);
+    const author = e?.author;
+    if (author) {
+      const agentId = getAgentIdFromAuthor(author);
       const finishReasons = ['STOP', 'DONE', 'MAX_TOKENS'];
-      const isFinished = finishReasons.includes(event.finishReason);
+      const isFinished =
+        finishReasons.includes(e.finishReason) ||
+        e.turnComplete === true ||
+        (e.partial === false && e.content != null);
+      if (typeof window !== 'undefined' && window.__DEBUG_PIPELINE) {
+        console.log('[Pipeline] event author=', author, '->', agentId, isFinished ? 'complete' : 'active');
+      }
 
       if (isFinished) {
         setAgentStatus(agentId, 'completed');
-        const idx = AGENT_SEQUENCE.indexOf(agentId);
-        if (idx >= 0 && idx < AGENT_SEQUENCE.length - 1) {
-          const nextId = AGENT_SEQUENCE[idx + 1];
-          if (agentStatuses[nextId] !== 'completed' && agentStatuses[nextId] !== 'active') {
-            setAgentStatus(nextId, 'active');
-          }
+        if (agentId === 'modeler') setAgentStatus('ai_modeler', 'waiting');
+        if (agentId === 'ai_modeler') setAgentStatus('modeler', 'waiting');
+        const nextIds = NEXT_AGENT_IDS[agentId] || [];
+        for (const nextId of nextIds) {
+          const st = getAgentStatus(nextId);
+          if (st !== 'completed' && st !== 'active') setAgentStatus(nextId, 'active');
         }
       } else {
-        if (agentStatuses[agentId] !== 'active' && agentStatuses[agentId] !== 'completed') {
+        if (getAgentStatus(agentId) !== 'active' && getAgentStatus(agentId) !== 'completed') {
           setAgentStatus(agentId, 'active');
         }
       }
     }
 
-    if (event.author && (event.author.includes('verification_loop') || event.author.includes('verification-loop'))) {
-      if (agentStatuses['builder'] !== 'active' && agentStatuses['builder'] !== 'completed') {
+    if (author && (String(author).includes('verification_loop') || String(author).includes('verification-loop'))) {
+      if (getAgentStatus('builder') !== 'active' && getAgentStatus('builder') !== 'completed') {
         setAgentStatus('builder', 'active');
       }
     }
 
-    if (event.actions?.toolCalls) {
-      for (const tc of event.actions.toolCalls) {
-        if (tc.name?.includes('write_file') || tc.name?.includes('convert_markdown')) {
-          if (agentStatuses['builder'] !== 'active' && agentStatuses['builder'] !== 'completed') {
-            setAgentStatus('builder', 'active');
-          }
+    const toolCalls = e?.actions?.toolCalls ?? [];
+    for (const tc of toolCalls) {
+      const name = tc.name ?? tc.function_call?.name;
+      if (name?.includes('write_file') || name?.includes('convert_markdown')) {
+        if (getAgentStatus('builder') !== 'active' && getAgentStatus('builder') !== 'completed') {
+          setAgentStatus('builder', 'active');
         }
-        if (tc.name === 'convert_markdown_to_pdf' && tc.response) {
-          const res = typeof tc.response === 'string' ? JSON.parse(tc.response) : tc.response;
-          if (res?.file_path?.endsWith('.pdf')) {
-            // PDF path tracked server-side for download
-          }
+      }
+      if ((name ?? '') === 'convert_markdown_to_pdf' && (tc.response ?? tc.function_response)) {
+        const res = typeof tc.response === 'string' ? JSON.parse(tc.response) : tc.response ?? tc.function_response;
+        if (res?.file_path?.endsWith('.pdf')) {
+          // PDF path tracked server-side for download
         }
       }
     }
 
-    if (event.content) {
+    if (event?.content) {
       let text = '';
       if (typeof event.content === 'string') text = event.content;
       else if (event.content.parts) {
@@ -171,7 +199,6 @@
     isAnalyzing = true;
     canReset = false;
     canDownload = false;
-    showBalloons = false;
 
     if (abortController) abortController.abort();
     abortController = new AbortController();
@@ -207,16 +234,16 @@
         },
         {
           signal,
-          onChunk: (event) => {
+          onChunk: (chunk) => {
+            const event = chunk?.event ?? chunk?.data ?? chunk;
             processStreamEvent(event);
           },
         }
       );
 
       AGENT_SEQUENCE.forEach((id) => {
-        if (agentStatuses[id] === 'active' || agentStatuses[id] === 'completed') {
-          setAgentStatus(id, 'completed');
-        }
+        const st = get(agentStatusesStore)[id];
+        if (st === 'active' || st === 'completed') setAgentStatus(id, 'completed');
       });
 
       reportHtml = markdownToSafeHtml(fullReport);
@@ -224,7 +251,6 @@
       isAnalyzing = false;
       canReset = true;
       canDownload = true;
-      showBalloons = true;
     } catch (err) {
       if (err.name === 'AbortError') return;
       errorMessage = userFriendlyError(err.message || 'Analysis failed');
@@ -252,7 +278,6 @@
     resetAgentStatuses();
     architectureText = '';
     await handleRemoveFile();
-    showBalloons = false;
     isAnalyzing = false;
     canReset = false;
     canDownload = false;
@@ -305,7 +330,7 @@
       onReset={handleReset}
       onRemoveFile={handleRemoveFile}
     />
-    <AgentPipeline statuses={agentStatusesReactive} />
+    <AgentPipeline statuses={$agentStatusesStore} />
     <ReportSection
       {fullReport}
       {reportHtml}
@@ -316,6 +341,3 @@
     />
   </div>
 </div>
-{#if showBalloons}
-  <Balloons onComplete={() => (showBalloons = false)} />
-{/if}

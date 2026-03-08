@@ -1,4 +1,4 @@
-"""Threat Modeler Agent for AutoThreat AI"""
+"""MEASTRO Threat Modeler Agent for AutoThreat AI"""
 
 import os
 
@@ -14,13 +14,13 @@ instructions_path = os.path.join(current_dir, "instructions.yaml")
 DEFAULT_MODEL = "gemini-3-flash-preview"
 MODEL_NAME = os.environ.get("GOOGLE_GENAI_MODEL", DEFAULT_MODEL)
 
-threat_modeler_agent = Agent(
-    name="threat_modeler_agent",
-    description="Identifies potential security threats and vulnerabilities based on system architecture and data flows.",
+meastro_threat_modeler_agent = Agent(
+    name="meastro_threat_modeler_agent",
+    description="Identifies potential security threats and vulnerabilities based on MEASTRO AI model system architecture and data flows.",
     instruction=load_instructions_file(instructions_path),
     output_key="raw_threat_model",
     model=MODEL_NAME,
     tools=[google_search]
 )
 
-root_agent = threat_modeler_agent
+root_agent = meastro_threat_modeler_agent
