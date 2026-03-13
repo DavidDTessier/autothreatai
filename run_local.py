@@ -51,22 +51,28 @@ AGENTS = [
         "port": 8002,
         "a2a": True,
     },
+     {
+        "name": "MEASTRO Threat Modeler",
+        "dir": "agents/meastro_threat_modeler",
+        "port": 8003,
+        "a2a": True,
+    },
     {
         "name": "Report Content Builder",
         "dir": "agents/report_builder",
-        "port": 8003,
+        "port": 8004,
         "a2a": True,
     },
     {
         "name": "Report Verifier",
         "dir": "agents/report_verifier",
-        "port": 8004,
+        "port": 8005,
         "a2a": True,
     },
     {
         "name": "Threat Modeler Orchestrator",
         "dir": "agents/orchestrator",
-        "port": 8005,
+        "port": 8006,
         "a2a": False,
     },
 ]
@@ -522,7 +528,7 @@ def main():
         time.sleep(3)  # Stagger startup with longer delay to avoid quota issues
     
     # Set environment variable for orchestrator agent
-    os.environ["AGENT_SERVER_URL"] = "http://localhost:8005"
+    os.environ["AGENT_SERVER_URL"] = "http://localhost:8006"
     
     # Wait for agents to start and stabilize
     logger.info("Waiting for agents to initialize...")
@@ -531,14 +537,14 @@ def main():
     # Check if sub-agents are running before starting orchestrator/FastAPI
     logger.info("Checking if sub-agents are running...")
     agents_running = 0
-    for port in [8001, 8002, 8003, 8004]:
+    for port in [8001, 8002, 8003, 8004, 8005]:
         if check_agent_health(port, f"Agent on port {port}", max_retries=3):
             agents_running += 1
     
     if agents_running < 4:
         logger.warning("Only %d of 4 sub-agents are running. Continuing anyway...", agents_running)
     else:
-        logger.info("✓ All 4 sub-agents are running")
+        logger.info("✓ All 5 sub-agents are running")
 
     # Rebuild Svelte frontend before starting the FastAPI server (so http://localhost:8000 serves latest build)
     logger.info("Rebuilding Svelte frontend before starting server...")
@@ -561,9 +567,10 @@ def main():
     logger.info("Backend Agents:")
     logger.info("  Architecture Parser:    http://localhost:8001")
     logger.info("  Threat Modeler:          http://localhost:8002")
-    logger.info("  Report Content Builder:  http://localhost:8003")
-    logger.info("  Report Verifier:         http://localhost:8004")
-    logger.info("  Orchestrator:            http://localhost:8005")
+    logger.info("  MEASTRO Threat Modeler:  http://localhost:8003")
+    logger.info("  Report Content Builder:  http://localhost:8004")
+    logger.info("  Report Verifier:         http://localhost:8005")
+    logger.info("  Orchestrator:            http://localhost:8006")
     logger.info("")
     logger.info("Frontend & API:")
     logger.info("  🌐 Frontend UI (Svelte): http://localhost:8000")

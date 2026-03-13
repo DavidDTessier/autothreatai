@@ -136,12 +136,15 @@
         if (agentId === 'ai_modeler') setAgentStatus('modeler', 'waiting');
         const nextIds = NEXT_AGENT_IDS[agentId] || [];
         for (const nextId of nextIds) {
+          if (nextId === 'modeler' || nextId === 'ai_modeler') continue;
           const st = getAgentStatus(nextId);
           if (st !== 'completed' && st !== 'active') setAgentStatus(nextId, 'active');
         }
       } else {
         if (getAgentStatus(agentId) !== 'active' && getAgentStatus(agentId) !== 'completed') {
           setAgentStatus(agentId, 'active');
+          if (agentId === 'modeler') setAgentStatus('ai_modeler', 'waiting');
+          if (agentId === 'ai_modeler') setAgentStatus('modeler', 'waiting');
         }
       }
     }

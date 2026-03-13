@@ -43,6 +43,8 @@ class ThreatModelerRouter(Agent):
         self, ctx: InvocationContext
     ) -> AsyncGenerator[Event, None]:
         state = ctx.session.state or {}
+        if state.get("report_verification_status") is None:
+            state["report_verification_status"] = "draft"
         architecture_summary = state.get("architecture_summary") or ""
 
         match = THREAT_MODELER_ROUTING_PATTERN.search(architecture_summary)
@@ -68,12 +70,14 @@ threat_modeler_router = ThreatModelerRouter(
 class EscalationChecker(Agent):
     """
     Checks the verifier's feedback status to determine if the report is acceptable.
-    
+
     This agent examines the verification results from report_verifier and:
-    - If status is "pass", returns escalation signal to break the loop
-    - If status is not "pass", returns continue signal to loop again
+    - If status is "pass", keeps verification_feedback in session state so the
+      report_builder_agent (run after the loop) can set the report Status to Approved,
+      then returns escalation signal to break the loop.
+    - If status is not "pass", returns continue signal to loop again.
     """
-    
+
     async def _run_async_impl(
         self, ctx: InvocationContext
     ) -> AsyncGenerator[Event, None]:
@@ -88,7 +92,11 @@ class EscalationChecker(Agent):
         is_passed = status == "pass"
         print(f"[EscalationChecker] Verification feedback: {status}")
 
+        if ctx.session.state is not None:
+            ctx.session.state["report_verification_status"] = status
         if is_passed:
+            if feedback is not None and ctx.session.state is not None:
+                ctx.session.state["verification_feedback"] = feedback
             yield Event(author=self.name, actions=EventActions(escalate=True))
         else:
             yield Event(author=self.name)
@@ -96,13 +104,46 @@ class EscalationChecker(Agent):
 escalation_checker_agent = EscalationChecker(name="escalation_checker")
 
 
+class FinalReportBuilderRunner(Agent):
+    """
+    Runs the report_builder agent one more time after the verification loop.
+    Used so the same report_builder instance is not added as a sub-agent twice
+    (ADK allows an agent only one parent). When the loop exited with pass,
+    report_builder will set the report Status to Approved.
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._report_builder = report_builder
+
+    async def _run_async_impl(
+        self, ctx: InvocationContext
+    ) -> AsyncGenerator[Event, None]:
+        state = ctx.session.state or {}
+        if state.get("report_verification_status") is None and state.get("verification_feedback") is not None:
+            feedback = state["verification_feedback"]
+            status = (
+                getattr(feedback, "status", None)
+                or (feedback.get("status") if isinstance(feedback, dict) else None)
+                or "fail"
+            )
+            ctx.session.state["report_verification_status"] = status
+        async for event in self._report_builder.run_async(ctx):
+            yield event
+
+
+final_report_builder_runner = FinalReportBuilderRunner(
+    name="final_report_builder_runner",
+    description="Runs report builder after verification loop to set Status to Approved when pass.",
+)
+
 # Create the verification loop: report_builder → report_verifier → escalation_checker
 # This loop continues until the escalation checker signals completion (when status == "pass")
 verification_loop = LoopAgent(
     name="verification_loop",
    description="Loops between report builder, report verifier, and escalation checker until report is approved",
     sub_agents=[
-        report_builder, 
+        report_builder,
         report_verifier,
         escalation_checker_agent
     ],
@@ -111,14 +152,14 @@ verification_loop = LoopAgent(
 )
 
 # Create orchestration pipeline with looping verification
-# The workflow: Architecture Parser → Threat Modeler Router → (MEASTRO or standard) Threat Modeler → Report Builder → [Loop: Verifier → Escalation Checker] → Summary
-# Report builder runs ONCE before verification to avoid rebuilding the report multiple times
+# Architecture Parser → Threat Modeler Router → (MEASTRO or standard) Threat Modeler → [Loop: Report Builder → Verifier → Escalation Checker] → Final Report Builder run (set Status to Approved when pass)
 root_agent = SequentialAgent(
     name="threat_model_orchestrator",
     description="Orchestrates threat modeling analysis with iterative report verification and refinement",
     sub_agents=[
-        architecture_parser,  # Parse the input architecture and classify AI/Agentic
-        threat_modeler_router,  # Route to MEASTRO or standard threat modeler
-        verification_loop,  # Loop between report builder, report verifier, and escalation checker
+        architecture_parser,
+        threat_modeler_router,
+        verification_loop,
+        final_report_builder_runner,
     ]
 )

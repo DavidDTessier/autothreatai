@@ -17,7 +17,7 @@ output_requirements:
 
         ## 1. Structural Integrity
         *   [ ] **Completeness:** Must contain all five sections: Executive Summary, Scope, Architecture, Findings, Remediation.
-        *   [ ] **Visuals:** Must contain a valid `mermaid` code block for the architecture diagram.
+        *   [ ] **Visuals:** Must contain a valid `mermaid` code block for the architecture diagram or a valid PNG image of the architecture diagram but not both. Prefer the PNG image.
         *   [ ] **Consistency:** The "Risk Counts" in the Executive Summary must mathematically match the number of findings listed in the body.
 
         ## 2. Technical Standardization

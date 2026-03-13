@@ -26,9 +26,10 @@ logger = logging.getLogger(__name__)
 AGENTS = [
     {"name": "Architecture Parser", "dir": "agents/architecture_parser", "port": 8001, "a2a": True},
     {"name": "Threat Modeler", "dir": "agents/threat_modeler", "port": 8002, "a2a": True},
-    {"name": "Report Content Builder", "dir": "agents/report_content_builder", "port": 8003, "a2a": True},
-    {"name": "Report Verifier", "dir": "agents/report_verifier", "port": 8004, "a2a": True},
-    {"name": "Threat Modeler Orchestrator", "dir": "agents/threat_modeller_orchestrator", "port": 8005, "a2a": False},
+    {"name": "MEASTRO Threat Modeler", "dir": "agents/meastro_threat_modeler", "port": 8003, "a2a": True},      
+    {"name": "Report Content Builder", "dir": "agents/report_content_builder", "port": 8004, "a2a": True},
+    {"name": "Report Verifier", "dir": "agents/report_verifier", "port": 8005, "a2a": True},
+    {"name": "Threat Modeler Orchestrator", "dir": "agents/threat_modeller_orchestrator", "port": 8006, "a2a": False},
 ]
 
 processes: List[subprocess.Popen] = []

@@ -26,18 +26,24 @@ workflow:
       *   If the tool returns `"status": "success"`, note the returned `"file_path"` (e.g. `reports/threat_map_20260217_123456.png`). You will use this exact path in the report.
       *   If the tool returns `"status": "error"`, embed the Mermaid diagram as a code block in the report instead (no image).
   - step: 2
+    name: Apply verification feedback and set report status
+    description: |
+      Report verification status (injected from session state): **{report_verification_status}**. You MUST use this value to set the report status.
+      *   If report_verification_status is **pass**: set the report status to **Approved** in the Threat Model Report header section. No other content changes are required when approving.
+      *   If report_verification_status is **fail**, missing, or anything else: set the report status to **Draft** (or keep Draft) and, if verification feedback with violations is present, revise the report to address each cited issue before the next steps.
+  - step: 3
     name: Write the report
     description: |
-      Generate the full Markdown report. In the "Visual Threat Map" section, embed the image with `![Visual Threat Map](<file_path>)` using the `file_path` from step 1 (if success), or a mermaid code block (if the tool failed).
-  - step: 3
+      Generate (or revise) the full Markdown report, applying the status and any revisions from the verification feedback step above. In the "Visual Threat Map" section, embed the image with `![Visual Threat Map](<file_path>)` using the `file_path` from step 1 (if success), or a mermaid code block (if the tool failed), but not both. Prefer the PNG image.
+  - step: 4
     name: Write File
     description: |
       Call **write_file** with the full Markdown content to save `Threat_Model_Report_[Date].md`.
-  - step: 4
+  - step: 5
     name: Convert to PDF
     description: |
       Call **convert_markdown_to_pdf** with the same Markdown content to generate the PDF.
-  - step: 5
+  - step: 6
     name: Final Output
     description: |
       Present the Markdown content in the chat and provide the download link for the PDF.
@@ -45,6 +51,13 @@ workflow:
 output_requirements:
   format: markdown
   sections:
+    - header: Threat Model Report
+      content: |
+        *   **Threat Model Report**
+        *   **Framework Used:** The framework that was used to analyze the system (e.g., "MEASTRO"STRIDE", "PASTA", "LINDDUN", "Hybrid").
+        *   **Date:** The current date in the format of YYYY-MM-DD.
+        *   **System:** The name of the system being analyzed.
+        *   **Status:** Use **Approved** when report_verification_status is "pass"; otherwise use "Draft" (or "Review"/"Rejected" as appropriate).
     - title: 1. Executive Summary
       content: |
         *   **System Risk Profile:** A high-level overview of the system's security posture.

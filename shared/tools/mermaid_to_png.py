@@ -23,6 +23,25 @@ _REPORTS_DIR = _PROJECT_ROOT / "reports"
 _MIN_PNG_BYTES = 500
 
 
+def _sanitize_mermaid_for_cli(diagram: str) -> str:
+    """
+    Sanitize diagram so mermaid-cli can parse it. LLMs sometimes output Unicode
+    lookalikes for hex colors (e.g. ﬂ°ff0000¶ß instead of #ff0000), which cause
+    parse errors. Normalize color-like values to valid ASCII #RRGGBB.
+    """
+    if not diagram:
+        return diagram
+    # Fix corrupted hex colors: non-ASCII junk + 6 hex digits + optional trailing junk -> #RRGGBB
+    out = re.sub(
+        r"[^\x00-\x7F]*([0-9a-fA-F]{6})[^\x00-\x7F]*(?=[,}\s]|$)",
+        r"#\1",
+        diagram,
+    )
+    # Strip trailing non-ASCII after a valid #RRGGBB (e.g. #ff0000¶ß -> #ff0000)
+    out = re.sub(r"#([0-9a-fA-F]{6})[^\x00-\x7F]+", r"#\1", out)
+    return out
+
+
 def _extract_mermaid_block(content: str) -> str:
     """Extract the first ```mermaid ... ``` block from content, or return content with fences stripped."""
     s = (content or "").strip()
@@ -71,6 +90,7 @@ def mermaid_to_png(mermaid_diagram: str, output_filename: str | None = None) -> 
     diagram = _extract_mermaid_block(mermaid_diagram or "")
     if not diagram:
         return {"status": "error", "error": "Mermaid diagram content is empty."}
+    diagram = _sanitize_mermaid_for_cli(diagram)
 
     if not _mermaid_cli_available():
         return {
