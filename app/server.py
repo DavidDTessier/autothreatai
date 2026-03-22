@@ -4,26 +4,24 @@ FastAPI server to serve the frontend and proxy requests to the orchestrator agen
 """
 
 import asyncio
+import base64
+import datetime
+import hashlib
+import io
 import json
+import logging
 import os
 import sys
-import logging
-import base64
-import hashlib
-import datetime
 from contextlib import asynccontextmanager
-from typing import Any, Dict, List, Optional
-import io
-
 from pathlib import Path
-import httpx
+from typing import Any
 
-from fastapi import FastAPI, HTTPException, UploadFile, File
+import httpx
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from PIL import Image
+from pydantic import BaseModel
 
 # Add project root to path
 project_root = Path(__file__).parent.parent.absolute()
@@ -34,7 +32,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def _user_friendly_error(raw_message: str, status_code: Optional[int] = None) -> str:
+def _user_friendly_error(raw_message: str, status_code: int | None = None) -> str:
     """Map internal/technical errors to short, user-friendly messages. No stack traces or URLs."""
     msg = (raw_message or "").strip().lower()
     if "404" in msg or "not_found" in msg or "not found" in msg:
@@ -86,14 +84,19 @@ def _run_cleanup() -> None:
     n_uploads = _cleanup_old_files(UPLOAD_DIR, uploads_max_sec)
     n_reports = _cleanup_old_files(REPORTS_DIR, reports_max_sec)
     n_logs = _cleanup_old_files(LOGS_DIR, logs_max_sec)
-    if n_uploads or n_reports:
-        logger.info("Cleanup: deleted %s file(s) from uploads, %s from reports", n_uploads, n_reports)
+    if n_uploads or n_reports or n_logs:
+        logger.info(
+            "Cleanup: deleted %s file(s) from uploads, %s from reports, %s from logs",
+            n_uploads,
+            n_reports,
+            n_logs,
+        )
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Start background cleanup task; cancel it on shutdown."""
-    cleanup_task: Optional[asyncio.Task] = None
+    cleanup_task: asyncio.Task | None = None
 
     async def cleanup_loop() -> None:
         while True:
@@ -215,7 +218,7 @@ async def create_session():
     """Create a new session with the orchestrator."""
     global WORKING_AGENT_NAME
     user_id = "web_user"
-    
+
     # First, try to get list of available apps to find the correct orchestrator name
     try:
         async with httpx.AsyncClient() as client:
@@ -225,15 +228,15 @@ async def create_session():
             if list_response.status_code == 200:
                 available_apps = list_response.json()
                 logger.info("Available apps: %s", available_apps)
-                
+
                 # Try to find orchestrator app name (check common variations)
                 orchestrator_candidates = [
                     "threat_model_orchestrator",
-                    "threat_modeller_orchestrator", 
+                    "threat_modeller_orchestrator",
                     "orchestrator",
                     "threat_model_orchestrator_agent"
                 ]
-                
+
                 for candidate in orchestrator_candidates:
                     if candidate in available_apps:
                         logger.info("Found orchestrator app: %s", candidate)
@@ -251,12 +254,12 @@ async def create_session():
                             logger.warning("Failed to create session with %s: %s - %s", candidate, session_response.status_code, error_text)
     except Exception as e:
         logger.warning("Could not list apps, trying direct connection: %s", e)
-    
+
     # Fallback: Try both possible agent names directly
     for agent_name in [AGENT_NAME, AGENT_NAME_ALT]:
         url = f"{ORCHESTRATOR_URL}/apps/{agent_name}/users/{user_id}/sessions"
         logger.info("Trying to create session at: %s", url)
-        
+
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.post(url, timeout=10.0)
@@ -271,10 +274,10 @@ async def create_session():
         except httpx.HTTPError as e:
             logger.warning("Failed with agent name %s: %s", agent_name, e)
             continue
-    
+
     # If we get here, both attempts failed
     raise HTTPException(
-        status_code=503, 
+        status_code=503,
         detail=f"Cannot connect to orchestrator. Tried both {AGENT_NAME} and {AGENT_NAME_ALT}. Check that the orchestrator is running on {ORCHESTRATOR_URL} and accessible."
     )
 
@@ -283,14 +286,14 @@ class QueryRequest(BaseModel):
     """Request model for query endpoint."""
     user_id: str = "web_user"
     session_id: str
-    message: Optional[str] = ""  # Optional text message (for backward compatibility)
-    message_parts: Optional[List[Dict[str, Any]]] = []  # Optional list of message parts (text or inlineData)
+    message: str | None = ""  # Optional text message (for backward compatibility)
+    message_parts: list[dict[str, Any]] | None = []  # Optional list of message parts (text or inlineData)
     # Google Gemini: API key and/or Vertex AI (required)
-    api_key: Optional[str] = None
-    use_vertex: Optional[bool] = False
-    vertex_project: Optional[str] = None
-    vertex_location: Optional[str] = None
-    model_id: Optional[str] = None  # Gemini model (e.g. gemini-3-flash-preview)
+    api_key: str | None = None
+    use_vertex: bool | None = False
+    vertex_project: str | None = None
+    vertex_location: str | None = None
+    model_id: str | None = None  # Gemini model (e.g. gemini-3-flash-preview)
 
 
 @app.post("/api/query")
@@ -298,7 +301,7 @@ async def stream_query(request: QueryRequest):
     """Stream query to the orchestrator agent."""
     global WORKING_AGENT_NAME
     url = f"{ORCHESTRATOR_URL}/run_sse"
-    
+
     logger.info("Streaming query to: %s", url)
     logger.info("Using agent name: %s", WORKING_AGENT_NAME)
     logger.info("Session ID: %s", request.session_id)
@@ -308,7 +311,7 @@ async def stream_query(request: QueryRequest):
     logger.info("Use Vertex: %s", request.use_vertex)
     logger.info("Vertex Project: %s", request.vertex_project)
     logger.info("Vertex Location: %s", request.vertex_location)
-    
+
     # Build message parts from request
     message_parts = []
     if request.message_parts:
@@ -325,7 +328,7 @@ async def stream_query(request: QueryRequest):
         # Fallback to text-only message
         message_parts = [{"text": request.message}]
         logger.info("Using text message: %d chars", len(request.message))
-    
+
     if not message_parts:
         raise HTTPException(status_code=400, detail="Either 'message' or 'message_parts' must be provided")
 
@@ -344,7 +347,7 @@ async def stream_query(request: QueryRequest):
             detail="Credentials required: provide either a Google API key or Vertex AI (check 'Use Vertex AI' and fill Project ID and Location).",
         )
 
-    request_payload_creds: Dict[str, Any] = {}
+    request_payload_creds: dict[str, Any] = {}
     if request.api_key:
         request_payload_creds["api_key"] = request.api_key
     if request.use_vertex:
@@ -413,7 +416,7 @@ async def stream_query(request: QueryRequest):
                     "streaming": True,
                 }
                 request_payload.update(request_payload_creds)
-                
+
                 # Create preview for logging
                 preview_parts = []
                 for part in message_parts:
@@ -423,14 +426,14 @@ async def stream_query(request: QueryRequest):
                     elif "inlineData" in part:
                         mime_type = part["inlineData"].get("mimeType", "unknown")  # pyright: ignore[reportAttributeAccessIssue]
                         preview_parts.append(f"image: {mime_type}")
-                
+
                 logger.info("Sending request to orchestrator with payload: %s", {
                     "app_name": request_payload["app_name"],
                     "user_id": request_payload["user_id"],
                     "session_id": request_payload["session_id"],
                     "message_parts": preview_parts,
                 })
-                
+
                 async with client.stream(
                     "POST",
                     url,
@@ -439,7 +442,7 @@ async def stream_query(request: QueryRequest):
                 ) as response:
                     logger.info("Response status: %s", response.status_code)
                     logger.info("Response headers: %s", dict(response.headers))
-                    
+
                     if response.status_code != 200:
                         # Read error response
                         error_text = f"HTTP {response.status_code}"
@@ -453,13 +456,13 @@ async def stream_query(request: QueryRequest):
                                 error_text = error_body.decode('utf-8', errors='replace')
                         except Exception as e:
                             logger.warning("Could not read error body: %s", e)
-                        
+
                         logger.error("Query failed with status %s: %s", response.status_code, error_text[:200])
                         logger.error("Request URL was: %s", url)
                         friendly = _user_friendly_error(error_text, response.status_code)
                         yield f"data: {json.dumps({'error': friendly})}\n\n"
                         return
-                    
+
                     # Stream the response chunks - small chunk_size so browser gets updates as each SSE event is sent
                     try:
                         async for chunk in response.aiter_bytes(chunk_size=256):
@@ -481,7 +484,7 @@ async def stream_query(request: QueryRequest):
                 yield f"data: {json.dumps({'error': friendly})}\n\n"
             finally:
                 await client.aclose()
-        
+
         return StreamingResponse(
             generate(),
             media_type="text/event-stream",
@@ -514,44 +517,44 @@ async def stream_query(request: QueryRequest):
 async def upload_file(file: UploadFile = File(...)):
     """
     Securely upload and validate image files.
-    
+
     Validates file size, MIME type, and image integrity before accepting uploads.
     Returns base64-encoded data for use in message_parts.
     """
     try:
         # Read file contents
         contents = await file.read()
-        
+
         # Check file size
         if len(contents) > MAX_FILE_SIZE:
             raise HTTPException(status_code=413, detail=f"File too large. Maximum size is {MAX_FILE_SIZE / (1024*1024):.0f}MB")
-        
+
         # Validate file extension
         file_ext = Path(file.filename).suffix.lower() if file.filename else ""
         if file_ext not in ALLOWED_EXTENSIONS:
             raise HTTPException(
-                status_code=400, 
+                status_code=400,
                 detail=f"Invalid file type. Allowed types: {', '.join(ALLOWED_EXTENSIONS)}"
             )
-        
+
         # Validate MIME type from file content using Pillow
         try:
             img = Image.open(io.BytesIO(contents))
             img.verify()  # Verify image is not corrupted
-            
+
             # Get actual format from Pillow
             img_format = img.format.lower() if img.format else ""
             valid_formats = {'png', 'jpeg', 'jpg', 'gif', 'webp'}
-            
+
             if img_format not in valid_formats:
                 raise HTTPException(
-                    status_code=400, 
+                    status_code=400,
                     detail=f"Invalid image format detected: {img_format}. Allowed formats: {', '.join(valid_formats)}"
                 )
-            
+
             # Reopen image after verify() (verify() closes the image)
             img = Image.open(io.BytesIO(contents))
-            
+
             # Additional validation: check image dimensions (prevent decompression bombs)
             width, height = img.size
             max_dimension = 10000  # 10k pixels max
@@ -560,7 +563,7 @@ async def upload_file(file: UploadFile = File(...)):
                     status_code=400,
                     detail=f"Image dimensions too large. Maximum: {max_dimension}x{max_dimension} pixels"
                 )
-            
+
             # Validate MIME type matches file extension
             mime_type_map = {
                 'png': 'image/png',
@@ -569,28 +572,28 @@ async def upload_file(file: UploadFile = File(...)):
                 'gif': 'image/gif',
                 'webp': 'image/webp'
             }
-            
+
             detected_mime = mime_type_map.get(img_format, '')
             if detected_mime not in ALLOWED_MIME_TYPES:
                 raise HTTPException(status_code=400, detail="MIME type validation failed")
-            
+
             # Validate client-provided MIME type matches detected type
             if file.content_type and file.content_type not in ALLOWED_MIME_TYPES:
                 logger.warning("Client MIME type mismatch: %s vs detected %s", file.content_type, detected_mime)
                 # Use detected MIME type instead of client-provided
-            
+
         except Image.UnidentifiedImageError as exc:
             raise HTTPException(status_code=400, detail="Invalid or corrupted image file") from exc
         except Exception as e:
             logger.error("Image validation error: %s", e)
             raise HTTPException(status_code=400, detail="Image validation failed") from e
-        
+
         # Generate secure filename with hash to prevent collisions
         file_hash = hashlib.sha256(contents).hexdigest()[:16]
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         safe_filename = f"upload_{timestamp}_{file_hash}{file_ext}"
         file_path = UPLOAD_DIR / safe_filename
-        
+
         # Save file with secure permissions (optional, for audit trail)
         # In production, you might want to store these temporarily and clean up
         try:
@@ -601,12 +604,12 @@ async def upload_file(file: UploadFile = File(...)):
         except Exception as e:
             logger.error("Error saving uploaded file: %s", e)
             # Continue even if save fails - we still have contents in memory
-        
+
         # Convert to base64 for use in message_parts
         base64_data = base64.b64encode(contents).decode('utf-8')
-        
+
         logger.info("File uploaded successfully: %s (%d bytes, %s)", file.filename, len(contents), detected_mime)
-        
+
         return JSONResponse({
             "status": "success",
             "mimeType": detected_mime,
@@ -616,7 +619,7 @@ async def upload_file(file: UploadFile = File(...)):
             "size": len(contents),
             "dimensions": {"width": width, "height": height}
         })
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -628,7 +631,7 @@ async def upload_file(file: UploadFile = File(...)):
 async def delete_uploaded_file(filename: str):
     """
     Delete an uploaded file from the server.
-    
+
     This endpoint allows cleanup of uploaded files that are no longer needed.
     Only files in the uploads directory can be deleted.
     """
@@ -636,19 +639,19 @@ async def delete_uploaded_file(filename: str):
         # Validate filename to prevent path traversal
         if not filename.startswith('upload_') or '..' in filename or '/' in filename or '\\' in filename:
             raise HTTPException(status_code=400, detail="Invalid filename")
-        
+
         # Normalize path and ensure it's within uploads directory
         file_path = (UPLOAD_DIR / filename).resolve()
         uploads_dir = UPLOAD_DIR.resolve()
-        
+
         # Prevent path traversal
         if not str(file_path).startswith(str(uploads_dir)):
             raise HTTPException(status_code=403, detail="Access denied")
-        
+
         # Check if file exists
         if not file_path.exists():
             raise HTTPException(status_code=404, detail="File not found")
-        
+
         # Delete the file
         try:
             file_path.unlink()
@@ -660,7 +663,7 @@ async def delete_uploaded_file(filename: str):
         except OSError as e:
             logger.error("Error deleting file %s: %s", filename, e)
             raise HTTPException(status_code=500, detail="Failed to delete file") from e
-            
+
     except HTTPException:
         raise
     except Exception as e:
@@ -704,15 +707,15 @@ async def get_latest_pdf():
     reports_dir = project_root / "reports"
     if not reports_dir.exists():
         raise HTTPException(status_code=404, detail="Reports directory not found")
-    
+
     # Find all PDF files
     pdf_files = list(reports_dir.glob("report_*.pdf"))
     if not pdf_files:
         raise HTTPException(status_code=404, detail="No PDF reports found")
-    
+
     # Get the most recent PDF
     latest_pdf = max(pdf_files, key=lambda p: p.stat().st_mtime)
-    
+
     return {
         "file_path": str(latest_pdf.relative_to(project_root)),
         "filename": latest_pdf.name,
@@ -726,7 +729,7 @@ async def download_report(filename: str):
     # Security: Only allow PDF files from reports directory
     if not filename.endswith('.pdf') or not filename.startswith('report_'):
         raise HTTPException(status_code=400, detail="Invalid filename")
-    
+
      # Normalize path and ensure it's within reports directory
     file_path = (project_root / "reports" / filename).resolve()
     reports_dir = (project_root / "reports").resolve()
@@ -734,10 +737,10 @@ async def download_report(filename: str):
      # Prevent path traversal
     if not str(file_path).startswith(str(reports_dir)):
         raise HTTPException(status_code=403, detail="Access denied")
-    
+
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found")
-    
+
     return FileResponse(
         path=str(file_path),
         filename=filename,

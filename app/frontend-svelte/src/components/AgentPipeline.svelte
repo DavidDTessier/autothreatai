@@ -1,5 +1,5 @@
 <script>
-  import { getAgentConfig, PIPELINE_STEPS } from '../lib/agents.js';
+  import { PIPELINE_STEPS, getAgentConfig } from '../lib/agents.js';
 
   export let statuses = {};
 

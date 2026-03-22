@@ -29,7 +29,7 @@ def write_file(content: str) -> dict:
 
         with open(file_path, 'w', encoding='utf-8') as f:
             f.write(content)
-        
+
         logging.info("Successfully saved file: %s", file_path)
         return {
             "status": "success",
@@ -46,7 +46,7 @@ def write_file(content: str) -> dict:
 def convert_markdown_to_pdf(content: str) -> dict:
     """
     Converts markdown text into a PDF file on the local filesystem.
-    
+
     Optimized for performance by using minimal TOC and faster rendering options.
 
     Args:
@@ -60,12 +60,12 @@ def convert_markdown_to_pdf(content: str) -> dict:
         # Create a timestamp for the file name
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         file_path = f"reports/report_{timestamp}.pdf"
-    
+
         # Optimize PDF generation: use minimal TOC (level 1 only) for faster processing
         # and disable unnecessary features that slow down rendering
         pdf = MarkdownPdf(toc_level=1)  # Reduced from 2 to 1 for faster processing
         pdf.add_section(Section(content))
-        
+
         # Save with optimized settings
         logging.info("Starting PDF conversion for %s...", file_path)
         pdf.save(file_path)

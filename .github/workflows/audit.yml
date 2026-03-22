@@ -5,6 +5,7 @@ on:
     branches: [main, master, develop]
   push:
     branches: [main]
+  workflow_call:
 
 jobs:
   audit:
@@ -19,15 +20,19 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install Python Audit Tools
-        run: |
-          pip install ruff intermediate-security-scanner mypy sqlalchemy-stubs
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install Python dependencies (project + dev tools)
+        run: uv sync --frozen --group dev
 
       - name: Run Ruff (Logic & Code Quality)
-        run: ruff check . --format=github
+        run: uv run ruff check . --format=github
 
       - name: Type Check (Logic Consistency)
-        run: mypy . --ignore-missing-imports
+        run: uv run mypy . --ignore-missing-imports
 
       # --- TYPESCRIPT AUDIT ---
       - name: Set up Node.js
@@ -35,23 +40,19 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
+          cache-dependency-path: app/frontend-svelte/package-lock.json
 
-      - name: Install Frontend Audit Tools
-        run: npm install && npm install -g @biomejs/biome zod-to-ts
+      - name: Install frontend dependencies
+        working-directory: app/frontend-svelte
+        run: npm ci
 
       - name: Biome Lint & Logic Check
-        run: npx @biomejs/biome check .
+        working-directory: app/frontend-svelte
+        run: npm run lint
 
       - name: Security Scan (SCA)
+        working-directory: app/frontend-svelte
         run: npm audit --audit-level=high
-
-      # --- DATABASE SCHEMA AUDIT ---
-      - name: Prisma/SQLAlchemy Schema Sync Check
-        run: |
-          # Ensure migrations match the current schema state
-          # For Prisma: npx prisma validate
-          # For SQLAlchemy: alembic check
-          echo "Verifying schema integrity..."
 
       - name: Final Report
         if: always()

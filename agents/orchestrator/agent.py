@@ -8,7 +8,8 @@ Uses ADK's SequentialAgent and LoopAgent to orchestrate the threat modeling work
 """
 
 import re
-from typing import Any, AsyncGenerator
+from collections.abc import AsyncGenerator
+from typing import Any
 
 from google.adk.agents import Agent, LoopAgent, SequentialAgent
 from google.adk.agents.invocation_context import InvocationContext

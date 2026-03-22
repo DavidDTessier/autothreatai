@@ -1,24 +1,25 @@
 <script>
   import { get } from 'svelte/store';
   import { writable } from 'svelte/store';
+  import AgentPipeline from './components/AgentPipeline.svelte';
+  import Footer from './components/Footer.svelte';
   import Header from './components/Header.svelte';
   import InputSection from './components/InputSection.svelte';
-  import AgentPipeline from './components/AgentPipeline.svelte';
   import ReportSection from './components/ReportSection.svelte';
-  import {
-    getConfig,
-    createSession,
-    uploadFile,
-    deleteUploadedFile,
-    streamQuery,
-    getLatestPdf,
-    getDownloadUrl,
-  } from './lib/api.js';
   import {
     AGENT_SEQUENCE,
     NEXT_AGENT_IDS,
     getAgentIdFromAuthor,
   } from './lib/agents.js';
+  import {
+    createSession,
+    deleteUploadedFile,
+    getConfig,
+    getDownloadUrl,
+    getLatestPdf,
+    streamQuery,
+    uploadFile,
+  } from './lib/api.js';
   import { markdownToSafeHtml } from './lib/sanitize.js';
 
   const CURRENT_USER_ID = 'web_user';
@@ -112,9 +113,9 @@
   function processStreamEvent(event) {
     if (event && typeof event.error === 'string') {
       errorMessage = userFriendlyError(event.error);
-      AGENT_SEQUENCE.forEach((id) => {
+      for (const id of AGENT_SEQUENCE) {
         if (getAgentStatus(id) !== 'completed') setAgentStatus(id, 'error');
-      });
+      }
       return;
     }
     const e = normEvent(event);
@@ -244,10 +245,10 @@
         }
       );
 
-      AGENT_SEQUENCE.forEach((id) => {
+      for (const id of AGENT_SEQUENCE) {
         const st = get(agentStatusesStore)[id];
         if (st === 'active' || st === 'completed') setAgentStatus(id, 'completed');
-      });
+      }
 
       reportHtml = markdownToSafeHtml(fullReport);
 
@@ -343,4 +344,5 @@
       onDownload={handleDownload}
     />
   </div>
+  <Footer />
 </div>

@@ -1,0 +1,42 @@
+# .pre-commit-config.yaml
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+      - id: detect-private-key  # Security Pillar: Prevents accidental secret leaks
+
+  # --- PYTHON LOGIC & LINTING ---
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.3.0
+    hooks:
+      - id: ruff
+        args: [ --fix, --exit-non-zero-on-fix ]
+      - id: ruff-format
+
+  # --- TYPESCRIPT / WEB LOGIC ---
+  - repo: https://github.com/biomejs/pre-commit
+    rev: v0.3.0
+    hooks:
+      - id: biome-check
+        additional_dependencies: ["@biomejs/biome@1.5.3"]
+        args: ["--apply"]
+
+  # --- TYPE SAFETY (LOGIC PILLAR) ---
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy (python type check)
+        entry: mypy
+        language: system
+        types: [python]
+        pass_filenames: false
+      - id: tsc
+        name: tsc (typescript logic check)
+        entry: npx tsc --noEmit
+        language: system
+        types: [ts, tsx]
+        pass_filenames: false

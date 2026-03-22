@@ -1,5 +1,5 @@
-import os
 import logging
+import os
 
 try:
     import yaml
@@ -21,9 +21,9 @@ def load_file_content(file_path: str, fallback: str = None) -> str:
         str: The contents of the file or fallback.
     """
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, encoding='utf-8') as f:
             return f.read().strip()
-    except (FileNotFoundError, IOError) as e:
+    except (OSError, FileNotFoundError) as e:
         if fallback is not None:
             logging.warning(f"File not found or unreadable: {file_path}. Using fallback.")
             return fallback
@@ -96,7 +96,7 @@ def load_instructions_file(file_path: str, fallback: str = "Perform your tasks a
             logging.warning("PyYAML not available; reading YAML file as plain text.")
             return load_file_content(file_path, fallback=fallback)
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 data = yaml.safe_load(f)
             if not data:
                 return fallback or ""
