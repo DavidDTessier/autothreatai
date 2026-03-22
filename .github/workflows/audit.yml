@@ -32,7 +32,7 @@ jobs:
         run: uv sync --frozen --group dev
 
       - name: Run Ruff (Logic & Code Quality)
-        run: uv run ruff check . --format=github
+        run: uv run ruff check . --output-format=github
 
       - name: Type Check (Logic Consistency)
         run: uv run mypy . --ignore-missing-imports
