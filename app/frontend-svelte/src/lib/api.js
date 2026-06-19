@@ -6,6 +6,12 @@ export async function getConfig() {
   return response.json();
 }
 
+export async function getProviders() {
+  const response = await fetch(`${API_BASE}/api/providers`);
+  if (!response.ok) return null;
+  return response.json();
+}
+
 export async function createSession() {
   const response = await fetch(`${API_BASE}/api/sessions`, {
     method: "POST",
@@ -66,6 +72,32 @@ export async function deleteUploadedFile(filename) {
   return response.json();
 }
 
+export async function updateProviderConfig({ provider_id, api_key, base_url, default_model, enabled }) {
+  const response = await fetch(`${API_BASE}/api/provider-config`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ provider_id, api_key, base_url, default_model, enabled }),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Provider config update failed: ${response.status} - ${text}`);
+  }
+  return response.json();
+}
+
+export async function updateAgentProviderConfig({ agent_id, provider_id, api_key, base_url, default_model, enabled }) {
+  const response = await fetch(`${API_BASE}/api/agent-provider-config`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ agent_id, provider_id, api_key, base_url, default_model, enabled }),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Agent provider config update failed: ${response.status} - ${text}`);
+  }
+  return response.json();
+}
+
 export async function streamQuery(
   {
     user_id,
@@ -76,6 +108,8 @@ export async function streamQuery(
     vertex_project,
     vertex_location,
     model_id,
+    provider_id,
+    agent_id,
   },
   { signal, onChunk },
 ) {
@@ -91,6 +125,8 @@ export async function streamQuery(
     if (vertex_location) body.vertex_location = vertex_location;
   }
   if (model_id) body.model_id = model_id;
+  if (provider_id) body.provider_id = provider_id;
+  if (agent_id) body.agent_id = agent_id;
   const response = await fetch(`${API_BASE}/api/query`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

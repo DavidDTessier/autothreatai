@@ -5,8 +5,8 @@ import os
 from google.adk.agents import Agent
 from google.adk.tools.google_search_tool import google_search
 
+from shared.utils.agent_factory import create_agent
 from shared.utils.file_loader import load_instructions_file
-
 # Resolve paths relative to this file's directory
 current_dir = os.path.dirname(os.path.abspath(__file__))
 instructions_path = os.path.join(current_dir, "instructions.yaml")
@@ -14,7 +14,7 @@ instructions_path = os.path.join(current_dir, "instructions.yaml")
 DEFAULT_MODEL = "gemini-3-flash-preview"
 MODEL_NAME = os.environ.get("GOOGLE_GENAI_MODEL", DEFAULT_MODEL)
 
-meastro_threat_modeler_agent = Agent(
+meastro_threat_modeler_agent = create_agent(
     name="meastro_threat_modeler_agent",
     description="Identifies potential security threats and vulnerabilities based on MEASTRO AI model system architecture and data flows.",
     instruction=load_instructions_file(instructions_path),

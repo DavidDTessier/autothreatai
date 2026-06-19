@@ -7,9 +7,9 @@
   export let useVertex = false;
   export let vertexProject = '';
   export let vertexLocation = 'us-central1';
-  export let selectedModelId = '';
-  /** @type {{ id: string; label: string }[]} */
-  export let supportedModels = [];
+  export let selectedProviderId = '';
+  /** @type {{ id: string; name: string; default_model?: string; enabled: boolean }[]} */
+  export let providers = [];
   export let vertexAvailable = true;
   /** @type {() => void} */
   export let onAnalyze = () => {};
@@ -25,6 +25,7 @@
   const MAX_BYTES = MAX_SIZE_MB * 1024 * 1024;
 
   $: hasFile = !!uploadedFile;
+  $: isLocalSelected = selectedProviderId && selectedProviderId.startsWith('local');
   $: uploadLabelText = hasFile ? 'Change Diagram' : 'Upload Reference Diagram (Optional)';
   $: if (!uploadedFile) {
     fileName = '';
@@ -79,29 +80,35 @@
     ></textarea>
 
     <div class="credentials-section">
-      <p class="credentials-heading">Credentials (required — provide Google API key or Vertex AI)</p>
-      {#if supportedModels.length > 0}
+      <p class="credentials-heading">
+        {#if isLocalSelected}
+          Credentials (optional for local models)
+        {:else}
+          Credentials (required — provide Google API key or Vertex AI)
+        {/if}
+      </p>
+      {#if providers.length > 0}
         <div class="credentials-row">
-          <label for="model-select-svelte">Gemini Model</label>
+          <label for="provider-select-svelte">Provider</label>
           <select
-            id="model-select-svelte"
-            bind:value={selectedModelId}
+            id="provider-select-svelte"
+            bind:value={selectedProviderId}
             disabled={isAnalyzing}
-            class="model-select"
+            class="provider-select"
           >
-            {#each supportedModels as m}
-              <option value={m.id}>{m.label}</option>
+            {#each providers as p}
+              <option value={p.id}>{p.name}</option>
             {/each}
           </select>
         </div>
       {/if}
       <div class="credentials-row">
-        <label for="api-key-svelte">Google API Key</label>
+        <label for="api-key-svelte">Google API Key{#if isLocalSelected} <span class="optional-badge">(Optional)</span>{/if}</label>
         <input
           id="api-key-svelte"
           type="password"
           bind:value={apiKey}
-          placeholder="Google/Gemini API key"
+          placeholder={isLocalSelected ? "Not needed for local models" : "Google/Gemini API key"}
           autocomplete="off"
           disabled={isAnalyzing}
         />

@@ -1,3 +1,8 @@
+<script>
+import { createEventDispatcher } from 'svelte';
+const dispatch = createEventDispatcher();
+</script>
+
 <header class="hero-header">
   <div class="logo-container">
     <div class="logo">
@@ -17,4 +22,5 @@
     Agentic threat modeling for the autonomous enterprise.<br />
     Security that moves as fast as you do.
   </p>
+<button class="settings-btn" on:click={() => dispatch('toggleConfig')}>Settings</button>
 </header>

@@ -1,8 +1,29 @@
-# Role: Senior Full-Stack Auditor (Python & TypeScript)
-
-You are a Lead Engineer and Security Researcher specializing in high-performance Python backends (FastAPI, SQLAlchemy) and TypeScript frontends (React, Next.js, Prisma).
-
 ---
+name: secure-code-review
+description: Review code changes for bugs, security, performance and best practices. Use when reviewing code changes (diffs) or if user asks you to review the full code base. Ask first if the user wants you to review the full code base or just a a git diff.
+---
+
+# Secure Code Review Skill
+
+When reviewing code, follow these steps:
+
+## Review Checklist
+
+Before applying the change, ask yourself:
+- Does this change introduce any new security vulnerabilities?
+- Does this change introduce any new performance issues?
+- Does this change introduce any new bugs?
+- Does this change follow the project's coding standards?
+- Does this change follow the project's architectural patterns?
+
+
+## Review Checklist
+
+- [ ] Logic Bugs
+- [ ] Security Holes
+- [ ] Performance Issues
+- [ ] Architectural Patterns
+
 
 ## 🔍 Core Inspection Logic
 
@@ -49,3 +70,6 @@ You are a Lead Engineer and Security Researcher specializing in high-performance
 - Start with a **"Health Check"** (🟢, 🟡, or 🔴).
 - Use **Before/After** code blocks for all suggested changes.
 - Keep it concise: No fluff, just the delta.
+- Be specific about what needs to change
+- Explain why, not just what
+- Suggest alternatives when possible

@@ -10,6 +10,7 @@ import hashlib
 import io
 import json
 import logging
+from shared.utils.security_validator import validate_input_safety
 import os
 import sys
 from contextlib import asynccontextmanager
@@ -22,6 +23,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from PIL import Image
 from pydantic import BaseModel
+from shared.providers.registry import ProviderRegistry
+
+_registry = ProviderRegistry.instance()
 
 # Add project root to path
 project_root = Path(__file__).parent.parent.absolute()
@@ -288,12 +292,15 @@ class QueryRequest(BaseModel):
     session_id: str
     message: str | None = ""  # Optional text message (for backward compatibility)
     message_parts: list[dict[str, Any]] | None = []  # Optional list of message parts (text or inlineData)
-    # Google Gemini: API key and/or Vertex AI (required)
+    # Provider selection
+    provider_id: str | None = None  # e.g. "gemini", "anthropic", "local"
+    # Model within provider (optional for providers with multiple models)
+    model_id: str | None = None
+    # Google Gemini / Anthropic credentials (optional depending on provider)
     api_key: str | None = None
     use_vertex: bool | None = False
     vertex_project: str | None = None
     vertex_location: str | None = None
-    model_id: str | None = None  # Gemini model (e.g. gemini-3-flash-preview)
 
 
 @app.post("/api/query")
@@ -320,31 +327,37 @@ async def stream_query(request: QueryRequest):
         logger.info("Using message_parts: %d parts", len(message_parts))
         for i, part in enumerate(message_parts):
             if "text" in part:
-                logger.info("Part %d: text (%d chars)", i, len(part.get("text", "")))
+                text_content = part.get("text", "")
+                # Validate text content for safety
+                safe, error_msg = validate_input_safety(text_content)
+                if not safe:
+                    raise HTTPException(status_code=400, detail=error_msg)
+                logger.info("Part %d: safe text (%d chars)", i, len(text_content))
             elif "inlineData" in part:
                 mime_type = part.get("inlineData", {}).get("mimeType", "unknown")
                 logger.info("Part %d: inlineData (%s)", i, mime_type)
     elif request.message:
         # Fallback to text-only message
         message_parts = [{"text": request.message}]
-        logger.info("Using text message: %d chars", len(request.message))
+        # Validate the combined text for safety
+        safe, error_msg = validate_input_safety(request.message)
+        if not safe:
+            raise HTTPException(status_code=400, detail=error_msg)
+        logger.info("Using safe text message: %d chars", len(request.message))
 
     if not message_parts:
         raise HTTPException(status_code=400, detail="Either 'message' or 'message_parts' must be provided")
 
-    # Require either Google API key or Vertex AI
-    has_api_key = bool(request.api_key and request.api_key.strip())
-    has_vertex = bool(
-        request.use_vertex
-        and request.vertex_project
-        and request.vertex_project.strip()
-        and request.vertex_location
-        and request.vertex_location.strip()
-    )
-    if not has_api_key and not has_vertex:
+    # Provider‑specific credential checks – defer to the provider implementation.
+    # If a provider is specified, we trust that it will raise its own errors when missing credentials.
+    # For backward compatibility, keep a minimal check for non‑local providers when no API key is supplied.
+    is_local = request.provider_id and request.provider_id.startswith('local')
+    if not is_local and not request.api_key:
+        # Non‑local providers generally need an API key (Gemini, Anthropic)
+        # The provider itself will validate; we just surface a generic error here.
         raise HTTPException(
             status_code=400,
-            detail="Credentials required: provide either a Google API key or Vertex AI (check 'Use Vertex AI' and fill Project ID and Location).",
+            detail="API key required for the selected provider. Provide a key or select a local model.",
         )
 
     request_payload_creds: dict[str, Any] = {}
@@ -681,24 +694,207 @@ async def health():
 RUNNING_IN_CONTAINER = os.environ.get("RUNNING_IN_CONTAINER", "").strip().lower() in ("1", "true", "yes")
 
 
+async def fetch_local_models():
+    """Fetch available models from local Ollama instance."""
+    models = []
+    try:
+        async with httpx.AsyncClient(timeout=2.0) as client:
+            response = await client.get("http://localhost:11434/api/tags")
+            if response.status_code == 200:
+                data = response.json()
+                for model in data.get("models", []):
+                    name = model.get("name")
+                    if name:
+                        models.append({
+                            "id": f"local/{name}",
+                            "label": f"Local: {name}",
+                            "provider": "local"
+                        })
+    except Exception as e:
+        logger.debug(f"Could not fetch local models (Ollama not running or unreachable): {e}")
+    return models
+
 @app.get("/api/config")
 async def get_config():
-    """Frontend config: vertex available (local only), supported Gemini models."""
+    """Frontend config: includes provider list and vertex availability."""
+    # Provider list from registry (includes id, name, enabled, default_model, etc.)
+    providers = [
+        {
+            "id": p.id,
+            "name": p.name,
+            "provider": p.id,  # same as id for UI grouping
+            "default_model": p.default_model,
+            "enabled": p.enabled,
+        }
+        for p in _registry.list_providers()
+    ]
     return {
         "vertex_available": not RUNNING_IN_CONTAINER,
-        "supported_models": [
-            {"id": "gemini-3-flash-preview", "label": "Gemini 3 Flash Preview (Default)"},
-            {"id": "gemini-3-pro-preview", "label": "Gemini 3 Pro Preview"},
-            {"id": "gemini-2.5-pro", "label": "Gemini 2.5 Pro"},
-            {"id": "gemini-flash-latest", "label": "Gemini 2.5 Flash Latest (09 2025)"},
-            {"id": "gemini-flash-lite-latest", "label": "Gemini 2.5 Flash Lite Latest (09 2025)"},
-            {"id": "gemini-2.5-flash", "label": "Gemini 2.5 Flash"},
-            {"id": "gemini-2.5-flash-lite", "label": "Gemini 2.5 Flash Lite"},
-            {"id": "gemini-2.0-flash", "label": "Gemini 2.0 Flash"},
-            {"id": "gemini-2.0-flash-lite", "label": "Gemini 2.0 Flash Lite"},
-        ],
-        "default_model_id": "gemini-3-flash-preview",
+        "providers": providers,
+        "default_provider": _registry.default_provider(),
     }
+
+@app.get("/api/providers")
+async def get_providers():
+    """Return list of configured model providers for the UI."""
+    providers = [
+        {
+            "id": p.id,
+            "name": p.name,
+            "default_model": p.default_model,
+            "enabled": p.enabled,
+        }
+        for p in _registry.list_providers()
+    ]
+    return {"providers": providers, "default_provider": _registry.default_provider()}
+
+# Provider config update endpoint – allows UI to edit API keys, base URLs, etc.
+class ProviderConfigUpdate(BaseModel):
+    provider_id: str
+    api_key: str | None = None
+    base_url: str | None = None
+    default_model: str | None = None
+    enabled: bool | None = None
+
+class AgentProviderConfigUpdate(BaseModel):
+    agent_id: str
+    provider_id: str | None = None
+    api_key: str | None = None
+    base_url: str | None = None
+    default_model: str | None = None
+    enabled: bool | None = None
+
+class ValidateCredentialRequest(BaseModel):
+    provider_id: str
+    api_key: str | None = None
+    base_url: str | None = None
+
+@app.post("/api/provider-config")
+
+@app.post("/api/agent-provider-config")
+async def update_agent_provider_config(update: AgentProviderConfigUpdate):
+    """Update per‑agent provider overrides in ``config/providers.json``.
+    The JSON structure is ``agent_overrides`` → ``agent_id`` → provider fields.
+    """
+    config_path = project_root / "config" / "providers.json"
+    if not config_path.exists():
+        raise HTTPException(status_code=500, detail="Provider config file missing")
+    # Load existing config
+    with open(config_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    overrides = data.get("agent_overrides", {})
+    agent_id = update.agent_id
+    # Prepare the override dict
+    ov = overrides.get(agent_id, {})
+    if update.provider_id is not None:
+        ov["provider_id"] = update.provider_id
+    if update.api_key is not None:
+        ov["api_key"] = update.api_key
+    if update.base_url is not None:
+        ov["base_url"] = update.base_url
+    if update.default_model is not None:
+        ov["default_model"] = update.default_model
+    if update.enabled is not None:
+        ov["enabled"] = update.enabled
+    overrides[agent_id] = ov
+    data["agent_overrides"] = overrides
+    # Write back
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+    # Reload registry to pick up changes
+    global _registry
+    _registry = ProviderRegistry.instance()
+    # Return refreshed overrides for debugging
+    return {"agent_id": agent_id, "override": ov}
+
+
+@app.post("/api/validate-credential")
+async def validate_credential(request: ValidateCredentialRequest):
+    """Validate API key format for a provider before accepting config updates."""
+    provider_id = request.provider_id
+    api_key = request.api_key
+    base_url = request.base_url
+
+    # Basic validation
+    if provider_id not in ["gemini", "anthropic", "local"]:
+        raise HTTPException(status_code=400, detail=f"Unknown provider: {provider_id}")
+
+    # Provider-specific validation
+    if provider_id == "gemini":
+        if not api_key or not api_key.strip():
+            return {"valid": False, "error": "API key required for Google Gemini"}
+        # Check format (basic check)
+        if not api_key.startswith("AIza"):
+            return {"valid": False, "error": "Gemini API key should start with 'AIza'"}
+        return {"valid": True, "provider": "gemini"}
+
+    elif provider_id == "anthropic":
+        if not api_key or not api_key.strip():
+            return {"valid": False, "error": "API key required for Anthropic"}
+        # Check format (basic check)
+        if not api_key.startswith("sk-ant-"):
+            return {"valid": False, "error": "Anthropic API key should start with 'sk-ant-'"}
+        return {"valid": True, "provider": "anthropic"}
+
+    elif provider_id == "local":
+        # Local Ollama doesn't require an API key
+        return {"valid": True, "provider": "local", "note": "Local provider - no API key required"}
+
+    return {"valid": False, "error": "Unknown provider"}
+
+
+@app.post("/api/provider-config")
+async def update_provider_config(update: ProviderConfigUpdate):
+    """Update a provider's configuration and persist to config/providers.json.
+
+    Returns the refreshed list of providers.
+    """
+    config_path = project_root / "config" / "providers.json"
+    if not config_path.exists():
+        raise HTTPException(status_code=500, detail="Provider config file missing")
+
+    # Load existing config
+    with open(config_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    providers = data.get("providers", [])
+    found = False
+    for p in providers:
+        if p.get("id") == update.provider_id:
+            found = True
+            # Update mutable fields only if supplied
+            if update.api_key is not None:
+                p["api_key"] = update.api_key
+            if update.base_url is not None:
+                p["base_url"] = update.base_url
+            if update.default_model is not None:
+                p["default_model"] = update.default_model
+            if update.enabled is not None:
+                p["enabled"] = update.enabled
+            break
+    if not found:
+        raise HTTPException(status_code=400, detail=f"Unknown provider id: {update.provider_id}")
+
+    # Write back
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+    # Reload registry to pick up new settings
+    # Re‑instantiate the singleton (simple way: create a new instance)
+    global _registry
+    _registry = ProviderRegistry.instance()  # instance will reload on next call because config changed
+
+    # Return refreshed list
+    refreshed = [
+        {
+            "id": p.get("id"),
+            "name": p.get("name"),
+            "default_model": p.get("default_model"),
+            "enabled": p.get("enabled", True),
+        }
+        for p in data.get("providers", [])
+    ]
+    return {"providers": refreshed, "default_provider": data.get("default_provider")}
 
 
 @app.get("/api/reports/latest-pdf")

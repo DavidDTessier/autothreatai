@@ -10,11 +10,14 @@ dependencies = [
     "markdown-pdf>=1.10",
     "pillow>=12.1.0",
     "python-dotenv>=1.2.1",
+    "openai>=1.0.0",
 ]
 
 [dependency-groups]
 dev = [
     "mypy>=1.8.0",
+    "pytest>=9.0.3",
+    "pytest-asyncio>=1.4.0",
     "ruff>=0.3.0,<0.7",
     "sqlalchemy-stubs",
     "types-pyyaml>=6.0.12.20250915",

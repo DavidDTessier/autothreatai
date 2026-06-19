@@ -9,6 +9,7 @@ import os
 from google.adk.agents import Agent
 from pydantic import BaseModel, Field
 
+from shared.utils.agent_factory import create_agent
 from shared.utils.file_loader import load_instructions_file
 
 # Resolve paths relative to this file's directory
@@ -28,7 +29,7 @@ class VerifierFeedback(BaseModel):
         description="Detailed feedback on what is missing. If 'pass', a brief confirmation."
     )
 
-report_verifier_agent = Agent(
+report_verifier_agent = create_agent(
     name="report_verifier_agent",
     description="Audits the threat model report against security best practices and project requirements.",
     instruction=load_instructions_file(instructions_path),

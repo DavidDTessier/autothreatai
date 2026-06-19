@@ -8,6 +8,7 @@ import os
 
 from google.adk.agents import Agent
 
+from shared.utils.agent_factory import create_agent
 from shared.utils.file_loader import load_instructions_file
 
 # Resolve paths relative to this file's directory
@@ -17,7 +18,7 @@ instructions_path = os.path.join(current_dir, "instructions.yaml")
 DEFAULT_MODEL = "gemini-3-flash-preview"
 MODEL_NAME = os.environ.get("GOOGLE_GENAI_MODEL", DEFAULT_MODEL)
 
-architecture_parser_agent = Agent(
+architecture_parser_agent = create_agent(
     name="architecture_parser_agent",
     description="Analyzes system architecture diagrams and documentation to identify trust boundaries, data flows, and potential attack vectors.",
     instruction=load_instructions_file(instructions_path),

@@ -5,6 +5,7 @@
   import Footer from './components/Footer.svelte';
   import Header from './components/Header.svelte';
   import InputSection from './components/InputSection.svelte';
+  import ConfigPage from './components/ConfigPage.svelte';
   import ReportSection from './components/ReportSection.svelte';
   import {
     AGENT_SEQUENCE,
@@ -17,8 +18,10 @@
     getConfig,
     getDownloadUrl,
     getLatestPdf,
+    getProviders,
     streamQuery,
     uploadFile,
+    updateProviderConfig,
   } from './lib/api.js';
   import { markdownToSafeHtml } from './lib/sanitize.js';
 
@@ -58,15 +61,26 @@
   let vertexProject = '';
   let vertexLocation = 'us-central1';
   let selectedModelId = '';
-  let supportedModels = [];
+  let providers = [];
+  let selectedProviderId = '';
   let vertexAvailable = true;
   let sessionId = null;
 
+  // Load config (providers) on startup
   getConfig().then((c) => {
     if (c) {
-      supportedModels = c.supported_models || [];
       vertexAvailable = c.vertex_available !== false;
-      if (c.default_model_id && !selectedModelId) selectedModelId = c.default_model_id;
+      // providers list comes from /api/config now
+      // We'll also fetch the more detailed list via getProviders()
+    }
+  });
+
+  // Fetch providers (id, name, default_model, enabled)
+  getProviders().then((p) => {
+    if (p && p.providers) {
+      providers = p.providers;
+      // Pick default provider if none selected
+      selectedProviderId = p.default_provider || (providers[0] && providers[0].id) || '';
     }
   });
   let abortController = null;
@@ -85,6 +99,12 @@
   let canReset = false;
   let canDownload = false;
   let errorMessage = '';
+  let showConfig = false;
+
+  $: if (selectedProviderId) {
+    const p = providers.find(p => p.id === selectedProviderId);
+    selectedModelId = p?.default_model || '';
+  }
 
   function resetAgentStatuses() {
     agentStatusesStore.set({ ...initialStatuses });
@@ -189,9 +209,10 @@
       return;
     }
 
+    const isLocal = selectedProviderId && selectedProviderId.startsWith('local');
     const hasApiKey = apiKey.trim().length > 0;
     const hasVertex = vertexAvailable && useVertex && vertexProject.trim().length > 0 && vertexLocation.trim().length > 0;
-    if (!hasApiKey && !hasVertex) {
+    if (!isLocal && !hasApiKey && !hasVertex) {
       errorMessage = 'Credentials required: provide either a Google API key or Vertex AI (check Use Vertex AI and fill Project ID and Location).';
       return;
     }
@@ -230,6 +251,7 @@
           user_id: CURRENT_USER_ID,
           session_id: sessionId,
           message_parts: messageParts,
+          provider_id: selectedProviderId.trim() || undefined,
           api_key: apiKey.trim() || undefined,
           use_vertex: useVertex,
           vertex_project: vertexProject.trim() || undefined,
@@ -316,7 +338,7 @@
 </script>
 
 <div class="container">
-  <Header />
+  <Header on:toggleConfig={() => showConfig = !showConfig} />
   <div class="main-content">
     <InputSection
       bind:architectureText
@@ -325,8 +347,8 @@
       bind:useVertex
       bind:vertexProject
       bind:vertexLocation
-      bind:selectedModelId
-      {supportedModels}
+      bind:selectedProviderId
+      {providers}
       {vertexAvailable}
       {isAnalyzing}
       {canReset}
@@ -346,3 +368,12 @@
   </div>
   <Footer />
 </div>
+
+{#if showConfig}
+  <ConfigPage
+    {providers}
+    bind:selectedProviderId
+    on:close={() => showConfig = false}
+    on:configSaved={(e) => { providers = e.detail?.providers || providers; }}
+  />
+{/if}
