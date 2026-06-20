@@ -87,28 +87,39 @@ class ProviderRegistry:
             )
             self._agent_overrides[agent_id] = cfg
 
-    def get_provider_for_agent(self, agent_id: str) -> ProviderInterface:
+    def get_config_for_agent(self, agent_id: str) -> ProviderConfig | None:
+        """Return the provider config for a specific agent, falling back to None if no override."""
+        ov_cfg = self._agent_overrides.get(agent_id)
+        if ov_cfg and ov_cfg.id:
+            return ov_cfg
+        return None
+
+    def get_provider_for_agent(self, agent_id: str) -> ProviderInterface | None:
         """Return the provider instance for a specific agent, falling back to the default provider."""
+        # Initialize agent-specific provider cache if not present
+        if not hasattr(self, "_agent_providers"):
+            self._agent_providers: Dict[str, ProviderInterface] = {}
+
         # Check for per‑agent override first
         ov_cfg = self._agent_overrides.get(agent_id)
         if ov_cfg and ov_cfg.id:
-            # Ensure provider is instantiated
-            if ov_cfg.id not in self._providers:
-                # Dynamically load the provider class similar to _load_config
+            # Ensure agent-specific provider is instantiated
+            if agent_id not in self._agent_providers:
                 if ov_cfg.id == "gemini":
-                    self._providers[ov_cfg.id] = GeminiProvider(ov_cfg)
+                    self._agent_providers[agent_id] = GeminiProvider(ov_cfg)
                 elif ov_cfg.id == "anthropic":
-                    self._providers[ov_cfg.id] = AnthropicProvider(ov_cfg)
+                    self._agent_providers[agent_id] = AnthropicProvider(ov_cfg)
                 elif ov_cfg.id == "local":
-                    self._providers[ov_cfg.id] = LocalProvider(ov_cfg)
+                    self._agent_providers[agent_id] = LocalProvider(ov_cfg)
                 else:
                     return None
-            return self._providers.get(ov_cfg.id)
+            return self._agent_providers.get(agent_id)
+        
         # No override – use the globally configured default provider
         default_id = self.default_provider()
         return self._providers.get(default_id)
 
-    def get_provider(self, provider_id: str) -> ProviderInterface:
+    def get_provider(self, provider_id: str) -> ProviderInterface | None:
         return self._providers.get(provider_id)
 
     def list_providers(self) -> List[ProviderConfig]:

@@ -349,16 +349,9 @@ async def stream_query(request: QueryRequest):
         raise HTTPException(status_code=400, detail="Either 'message' or 'message_parts' must be provided")
 
     # Provider‑specific credential checks – defer to the provider implementation.
-    # If a provider is specified, we trust that it will raise its own errors when missing credentials.
-    # For backward compatibility, keep a minimal check for non‑local providers when no API key is supplied.
+    # The provider itself (or agent overrides) will validate; we let it fall through
+    # so that the orchestrator can use its configured keys.
     is_local = request.provider_id and request.provider_id.startswith('local')
-    if not is_local and not request.api_key:
-        # Non‑local providers generally need an API key (Gemini, Anthropic)
-        # The provider itself will validate; we just surface a generic error here.
-        raise HTTPException(
-            status_code=400,
-            detail="API key required for the selected provider. Provide a key or select a local model.",
-        )
 
     request_payload_creds: dict[str, Any] = {}
     if request.api_key:
@@ -373,48 +366,73 @@ async def stream_query(request: QueryRequest):
         request_payload_creds["model_id"] = request.model_id.strip()
 
     # Set API key / Vertex / model on orchestrator and all agent processes (ADK reads from env)
-    if request_payload_creds:
-        base = ORCHESTRATOR_URL.rstrip("/").rsplit(":", 1)[0] if ":" in ORCHESTRATOR_URL else "http://localhost"
-        set_key_urls = [f"{base}:{port}/set-api-key" for port in (8001, 8002, 8003, 8004, 8005)]
-        orch_url = f"{ORCHESTRATOR_URL.rstrip('/')}/set-api-key"
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as set_client:
-                for set_key_url in set_key_urls:
-                    try:
-                        r = await set_client.post(set_key_url, json=request_payload_creds)
-                        if r.status_code == 200:
-                            logger.info("set-api-key succeeded: %s", set_key_url)
-                        else:
-                            if set_key_url == orch_url:
-                                logger.error("set-api-key orchestrator failed: %s %s", r.status_code, r.text[:300])
-                                raise HTTPException(
-                                    status_code=503,
-                                    detail=(
-                                        "Orchestrator could not accept API key. "
-                                        "If using Docker, rebuild the orchestrator: docker compose build orchestrator"
-                                    ),
-                                )
-                            logger.warning("set-api-key %s returned %s", set_key_url, r.status_code)
-                    except HTTPException:
-                        raise
-                    except Exception as e:
+    agent_port_map = {
+        8001: "parser",
+        8002: "modeler",
+        8003: "meastro",
+        8004: "builder",
+        8005: "verifier",
+        8006: "orchestrator"
+    }
+
+    base = ORCHESTRATOR_URL.rstrip("/").rsplit(":", 1)[0] if ":" in ORCHESTRATOR_URL else "http://localhost"
+    orch_url = f"{base}:8006/set-api-key"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as set_client:
+            for port, agent_id in agent_port_map.items():
+                set_key_url = f"{base}:{port}/set-api-key"
+
+                # Start with global payload
+                agent_payload = request_payload_creds.copy()
+
+                # Merge in agent-specific overrides if present
+                agent_config = _registry.get_config_for_agent(agent_id)
+                if agent_config:
+                    if "api_key" not in agent_payload and agent_config.api_key:
+                        agent_payload["api_key"] = agent_config.api_key
+                    if "model_id" not in agent_payload and agent_config.default_model:
+                        agent_payload["model_id"] = agent_config.default_model
+
+                # Only send if there is something to send
+                if not agent_payload:
+                    continue
+
+                try:
+                    r = await set_client.post(set_key_url, json=agent_payload)
+                    if r.status_code == 200:
+                        logger.info("set-api-key succeeded: %s with config from %s", set_key_url, agent_id)
+                    else:
                         if set_key_url == orch_url:
+                            logger.error("set-api-key orchestrator failed: %s %s", r.status_code, r.text[:300])
                             raise HTTPException(
                                 status_code=503,
                                 detail=(
-                                    f"Cannot set API key on orchestrator: {e!s}. "
-                                    "If using Docker, ensure orchestrator is running and rebuilt."
+                                    "Orchestrator could not accept API key. "
+                                    "If using Docker, rebuild the orchestrator: docker compose build orchestrator"
                                 ),
-                            ) from e
-                        logger.debug("set-api-key %s failed: %s", set_key_url, e)
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error("set-api-key request failed: %s", e)
-            raise HTTPException(
-                status_code=503,
-                detail=f"Cannot set API key on orchestrator: {e!s}. If using Docker, ensure orchestrator is running and rebuilt."
-            ) from e
+                            )
+                        logger.warning("set-api-key %s returned %s", set_key_url, r.status_code)
+                except HTTPException:
+                    raise
+                except Exception as e:
+                    if set_key_url == orch_url:
+                        raise HTTPException(
+                            status_code=503,
+                            detail=(
+                                f"Cannot set API key on orchestrator: {e!s}. "
+                                "If using Docker, ensure orchestrator is running and rebuilt."
+                            ),
+                        ) from e
+                    logger.debug("set-api-key %s failed: %s", set_key_url, e)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("set-api-key request failed: %s", e)
+        raise HTTPException(
+            status_code=503,
+            detail=f"Cannot set API key on orchestrator: {e!s}. If using Docker, ensure orchestrator is running and rebuilt."
+        ) from e
 
     client = httpx.AsyncClient(timeout=300.0)
     try:
@@ -437,7 +455,8 @@ async def stream_query(request: QueryRequest):
                         text = part["text"]
                         preview_parts.append(f"text: {text[:30]}..." if len(text) > 30 else f"text: {text}")
                     elif "inlineData" in part:
-                        mime_type = part["inlineData"].get("mimeType", "unknown")  # pyright: ignore[reportAttributeAccessIssue]
+                        inline_data = part.get("inlineData") or {}
+                        mime_type = inline_data.get("mimeType", "unknown") if isinstance(inline_data, dict) else "unknown"
                         preview_parts.append(f"image: {mime_type}")
 
                 logger.info("Sending request to orchestrator with payload: %s", {

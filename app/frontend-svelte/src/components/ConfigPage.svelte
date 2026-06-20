@@ -19,7 +19,9 @@
   const dispatch = createEventDispatcher();
 
   // Watch for provider changes to populate edit fields
-  $: {
+  let currentProviderId = null;
+  $: if (selectedProviderId && selectedProviderId !== currentProviderId && providers.length > 0) {
+    currentProviderId = selectedProviderId;
     const p = providers.find(p => p.id === selectedProviderId);
     if (p) {
       isLocal = p.id === 'local';

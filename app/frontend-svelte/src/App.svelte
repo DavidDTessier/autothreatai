@@ -209,13 +209,10 @@
       return;
     }
 
-    const isLocal = selectedProviderId && selectedProviderId.startsWith('local');
-    const hasApiKey = apiKey.trim().length > 0;
-    const hasVertex = vertexAvailable && useVertex && vertexProject.trim().length > 0 && vertexLocation.trim().length > 0;
-    if (!isLocal && !hasApiKey && !hasVertex) {
-      errorMessage = 'Credentials required: provide either a Google API key or Vertex AI (check Use Vertex AI and fill Project ID and Location).';
-      return;
-    }
+    // Validation for credentials is intentionally deferred to the backend.
+    // The backend is aware of agent_overrides in providers.json and environment variables
+    // that the frontend cannot see. If credentials are truly missing, the backend will
+    // return a clean error that will be displayed to the user.
 
     fullReport = '';
     reportHtml = '';

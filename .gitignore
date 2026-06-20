@@ -17,6 +17,8 @@ __pycache__/
 _agent_wrapper_*.py
 .claude/settings.json
 
+config/providers.local.json
+
 # Svelte frontend
 app/frontend-svelte/node_modules/
 app/frontend-svelte/dist/
