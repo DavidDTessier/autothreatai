@@ -90,6 +90,79 @@ flowchart TD
 
    The server serves the Svelte app at http://localhost:8000 when `app/frontend-svelte/dist` exists. `run_local.py` builds the frontend automatically before starting.
 
+## Multi-Provider Configuration
+
+AutoThreat AI supports multiple AI providers (Gemini, Anthropic, Local models). Configure providers in `config/providers.json`:
+
+### Provider Configuration
+
+1. **Edit `config/providers.json`** with your API keys:
+   ```json
+   {
+     "default_provider": "gemini",
+     "providers": [
+       {
+         "id": "gemini",
+         "name": "Google Gemini",
+         "base_url": "https://generativelanguage.googleapis.com/v1beta",
+         "api_key": "your-google-api-key",
+         "default_model": "gemini-3-flash-preview",
+         "enabled": true
+       },
+       {
+         "id": "anthropic",
+         "name": "Anthropic",
+         "base_url": "https://api.anthropic.com",
+         "api_key": "your-anthropic-api-key",
+         "default_model": "claude-sonnet-4-6",
+         "enabled": true
+       },
+       {
+         "id": "local",
+         "name": "Local Ollama",
+         "base_url": "http://localhost:11434",
+         "api_key": "",
+         "default_model": "llama3",
+         "enabled": true
+       }
+     ]
+   }
+   ```
+
+2. **Sync `.env` file** - Ensure `GOOGLE_API_KEY` in `.env` matches the key in `providers.json`:
+   ```env
+   GOOGLE_API_KEY=your-google-api-key
+   ```
+
+3. **Agent Overrides** (optional) - Assign specific providers to individual agents:
+   ```json
+   "agent_overrides": {
+     "orchestrator": { "provider_id": "gemini" },
+     "builder": { "provider_id": "anthropic" },
+     "verifier": { "provider_id": "local" }
+   }
+   ```
+
+### Provider Priority
+
+- If `agent_overrides` specifies a provider for an agent, that provider is used
+- Otherwise, the agent uses `default_provider`
+- The system falls back to other enabled providers if one fails
+
+### Quota Management
+
+- **Google API**: Enable billing in [Google Cloud Console](https://console.cloud.google.com/) and ensure the Generative Language API is enabled
+- **OpenRouter**: Upgrade credits at [openrouter.ai/settings/credits](https://openrouter.ai/settings/credits) if hitting token limits
+- **Local models**: Ensure Ollama is running and accessible at the configured `base_url`
+
+### Testing Configuration
+
+After updating providers, restart the system:
+```bash
+uv run python run_local.py
+```
+Check logs for provider-specific messages to verify configuration.
+
 ## Usage
 
 ### Running the Full System
