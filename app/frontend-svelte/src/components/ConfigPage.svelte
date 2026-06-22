@@ -1,33 +1,40 @@
 <script>
-  import { AGENT_CONFIG } from '../lib/agents.js';
-  import { createEventDispatcher } from 'svelte';
-  import { updateProviderConfig, updateAgentProviderConfig } from '../lib/api.js';
+  import { createEventDispatcher } from "svelte";
+  import { AGENT_CONFIG } from "../lib/agents.js";
+  import {
+    updateAgentProviderConfig,
+    updateProviderConfig,
+  } from "../lib/api.js";
 
   export let providers = [];
-  export let selectedProviderId = '';
-  let selectedAgentId = '';
+  export let selectedProviderId = "";
+  let selectedAgentId = "";
   let isLocal = false;
 
   // Editable fields for the selected provider
-  let apiKey = '';
-  let baseUrl = '';
-  let defaultModel = '';
+  let apiKey = "";
+  let baseUrl = "";
+  let defaultModel = "";
   let enabled = true;
   let isSaving = false;
-  let saveMessage = '';
+  let saveMessage = "";
 
   const dispatch = createEventDispatcher();
 
   // Watch for provider changes to populate edit fields
   let currentProviderId = null;
-  $: if (selectedProviderId && selectedProviderId !== currentProviderId && providers.length > 0) {
+  $: if (
+    selectedProviderId &&
+    selectedProviderId !== currentProviderId &&
+    providers.length > 0
+  ) {
     currentProviderId = selectedProviderId;
-    const p = providers.find(p => p.id === selectedProviderId);
+    const p = providers.find((p) => p.id === selectedProviderId);
     if (p) {
-      isLocal = p.id === 'local';
-      apiKey = p.api_key ?? '';
-      baseUrl = p.base_url ?? '';
-      defaultModel = p.default_model ?? '';
+      isLocal = p.id === "local";
+      apiKey = p.api_key ?? "";
+      baseUrl = p.base_url ?? "";
+      defaultModel = p.default_model ?? "";
       enabled = p.enabled ?? true;
     }
     // Optional: if an agent is selected, you could load agent‑specific defaults here.
@@ -37,40 +44,40 @@
   async function handleSave() {
     if (!selectedProviderId) return;
     isSaving = true;
-    saveMessage = '';
+    saveMessage = "";
     try {
       let result;
-        if (selectedAgentId) {
-          result = await updateAgentProviderConfig({
-            agent_id: selectedAgentId,
-            provider_id: selectedProviderId,
-            api_key: apiKey,
-            base_url: baseUrl,
-            default_model: defaultModel,
-            enabled: enabled
-          });
-        } else {
-          result = await updateProviderConfig({
-            provider_id: selectedProviderId,
-            api_key: apiKey,
-            base_url: baseUrl,
-            default_model: defaultModel,
-            enabled: enabled
-          });
-        }
+      if (selectedAgentId) {
+        result = await updateAgentProviderConfig({
+          agent_id: selectedAgentId,
+          provider_id: selectedProviderId,
+          api_key: apiKey,
+          base_url: baseUrl,
+          default_model: defaultModel,
+          enabled: enabled,
+        });
+      } else {
+        result = await updateProviderConfig({
+          provider_id: selectedProviderId,
+          api_key: apiKey,
+          base_url: baseUrl,
+          default_model: defaultModel,
+          enabled: enabled,
+        });
+      }
       // Notify parent that config changed
-      dispatch('configSaved', result);
-      saveMessage = 'Saved!';
-      setTimeout(() => dispatch('close'), 300);
+      dispatch("configSaved", result);
+      saveMessage = "Saved!";
+      setTimeout(() => dispatch("close"), 300);
     } catch (e) {
-      saveMessage = e.message || 'Save failed';
+      saveMessage = e.message || "Save failed";
     } finally {
       isSaving = false;
     }
   }
 
   function handleCancel() {
-    dispatch('close');
+    dispatch("close");
   }
 </script>
 
@@ -78,14 +85,14 @@
   <div class="config-panel">
     <h2>Settings</h2>
 
-      <div class="field">
-        <label for="agent-select">Agent</label>
-        <select id="agent-select" bind:value={selectedAgentId}>
-          {#each AGENT_CONFIG as a}
-            <option value={a.id}>{a.name}</option>
-          {/each}
-        </select>
-      </div>
+    <div class="field">
+      <label for="agent-select">Agent</label>
+      <select id="agent-select" bind:value={selectedAgentId}>
+        {#each AGENT_CONFIG as a}
+          <option value={a.id}>{a.name}</option>
+        {/each}
+      </select>
+    </div>
 
     <div class="field">
       <label for="provider-select">Provider</label>
@@ -98,18 +105,39 @@
 
     {#if selectedProviderId}
       <div class="field">
-        <label for="api-key">API Key {#if isLocal}<span class="optional">(optional)</span>{/if}</label>
-        <input id="api-key" type="password" bind:value={apiKey} placeholder="API key" />
+        <label for="api-key"
+          >API Key {#if isLocal}<span class="optional">(optional)</span
+            >{/if}</label
+        >
+        <input
+          id="api-key"
+          type="password"
+          bind:value={apiKey}
+          placeholder="API key"
+        />
       </div>
 
       <div class="field">
-        <label for="base-url">Base URL {#if !isLocal}<span class="optional">(optional)</span>{/if}</label>
-        <input id="base-url" type="text" bind:value={baseUrl} placeholder="e.g. http://localhost:11434" />
+        <label for="base-url"
+          >Base URL {#if !isLocal}<span class="optional">(optional)</span
+            >{/if}</label
+        >
+        <input
+          id="base-url"
+          type="text"
+          bind:value={baseUrl}
+          placeholder="e.g. http://localhost:11434"
+        />
       </div>
 
       <div class="field">
         <label for="default-model">Default Model</label>
-        <input id="default-model" type="text" bind:value={defaultModel} placeholder="model-id" />
+        <input
+          id="default-model"
+          type="text"
+          bind:value={defaultModel}
+          placeholder="model-id"
+        />
       </div>
 
       <div class="field checkbox">
@@ -121,7 +149,9 @@
     {/if}
 
     <div class="btn-group">
-      <button on:click={handleSave} disabled={isSaving || !selectedProviderId}>Save</button>
+      <button on:click={handleSave} disabled={isSaving || !selectedProviderId}
+        >Save</button
+      >
       <button on:click={handleCancel} disabled={isSaving}>Cancel</button>
     </div>
 
@@ -135,7 +165,7 @@
   .config-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0,0,0,0.5);
+    background: rgba(0, 0, 0, 0.5);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -147,7 +177,7 @@
     border-radius: 8px;
     min-width: 350px;
     max-width: 500px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
   }
   .field {
     margin-bottom: 1rem;
@@ -157,7 +187,8 @@
     margin-bottom: 0.25rem;
     font-weight: 500;
   }
-  .field input, .field select {
+  .field input,
+  .field select {
     width: 100%;
     padding: 0.5rem;
     border: 1px solid #ccc;

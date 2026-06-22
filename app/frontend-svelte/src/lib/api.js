@@ -72,28 +72,58 @@ export async function deleteUploadedFile(filename) {
   return response.json();
 }
 
-export async function updateProviderConfig({ provider_id, api_key, base_url, default_model, enabled }) {
+export async function updateProviderConfig({
+  provider_id,
+  api_key,
+  base_url,
+  default_model,
+  enabled,
+}) {
   const response = await fetch(`${API_BASE}/api/provider-config`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ provider_id, api_key, base_url, default_model, enabled }),
+    body: JSON.stringify({
+      provider_id,
+      api_key,
+      base_url,
+      default_model,
+      enabled,
+    }),
   });
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(`Provider config update failed: ${response.status} - ${text}`);
+    throw new Error(
+      `Provider config update failed: ${response.status} - ${text}`,
+    );
   }
   return response.json();
 }
 
-export async function updateAgentProviderConfig({ agent_id, provider_id, api_key, base_url, default_model, enabled }) {
+export async function updateAgentProviderConfig({
+  agent_id,
+  provider_id,
+  api_key,
+  base_url,
+  default_model,
+  enabled,
+}) {
   const response = await fetch(`${API_BASE}/api/agent-provider-config`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ agent_id, provider_id, api_key, base_url, default_model, enabled }),
+    body: JSON.stringify({
+      agent_id,
+      provider_id,
+      api_key,
+      base_url,
+      default_model,
+      enabled,
+    }),
   });
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(`Agent provider config update failed: ${response.status} - ${text}`);
+    throw new Error(
+      `Agent provider config update failed: ${response.status} - ${text}`,
+    );
   }
   return response.json();
 }

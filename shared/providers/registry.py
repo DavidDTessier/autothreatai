@@ -1,11 +1,9 @@
 import json
-import os
 from pathlib import Path
-from typing import Dict, List
 
-from .base import ProviderInterface, ProviderConfig
-from .gemini import GeminiProvider
 from .anthropic import AnthropicProvider
+from .base import ProviderConfig, ProviderInterface
+from .gemini import GeminiProvider
 from .local import LocalProvider
 
 # Resolve config path relative to project root (where config/providers.json lives)
@@ -23,10 +21,10 @@ class ProviderRegistry:
 
     def __init__(self, config_path: Path | None = None):
         self.config_path = config_path or CONFIG_PATH
-        self._providers: Dict[str, ProviderInterface] = {}
-        self._configs: Dict[str, ProviderConfig] = {}
+        self._providers: dict[str, ProviderInterface] = {}
+        self._configs: dict[str, ProviderConfig] = {}
         self._load_config()
-        self._agent_overrides: Dict[str, ProviderConfig] = {}
+        self._agent_overrides: dict[str, ProviderConfig] = {}
         self._load_agent_overrides()
 
     @classmethod
@@ -38,7 +36,7 @@ class ProviderRegistry:
     def _load_config(self) -> None:
         if not self.config_path.exists():
             raise FileNotFoundError(f"Provider config not found: {self.config_path}")
-        with open(self.config_path, "r", encoding="utf-8") as f:
+        with open(self.config_path, encoding="utf-8") as f:
             raw = json.load(f)
         for p in raw.get("providers", []):
             cfg = ProviderConfig(
@@ -73,7 +71,7 @@ class ProviderRegistry:
         """
         if not self.config_path.exists():
             return
-        with open(self.config_path, "r", encoding="utf-8") as f:
+        with open(self.config_path, encoding="utf-8") as f:
             raw = json.load(f)
         overrides = raw.get("agent_overrides", {})
         for agent_id, ov in overrides.items():
@@ -98,7 +96,7 @@ class ProviderRegistry:
         """Return the provider instance for a specific agent, falling back to the default provider."""
         # Initialize agent-specific provider cache if not present
         if not hasattr(self, "_agent_providers"):
-            self._agent_providers: Dict[str, ProviderInterface] = {}
+            self._agent_providers: dict[str, ProviderInterface] = {}
 
         # Check for per‑agent override first
         ov_cfg = self._agent_overrides.get(agent_id)
@@ -114,7 +112,7 @@ class ProviderRegistry:
                 else:
                     return None
             return self._agent_providers.get(agent_id)
-        
+
         # No override – use the globally configured default provider
         default_id = self.default_provider()
         return self._providers.get(default_id)
@@ -122,10 +120,10 @@ class ProviderRegistry:
     def get_provider(self, provider_id: str) -> ProviderInterface | None:
         return self._providers.get(provider_id)
 
-    def list_providers(self) -> List[ProviderConfig]:
+    def list_providers(self) -> list[ProviderConfig]:
         return list(self._configs.values())
 
     def default_provider(self) -> str:
         # fallback to first enabled provider if not set
-        raw = json.load(open(self.config_path, "r", encoding="utf-8"))
+        raw = json.load(open(self.config_path, encoding="utf-8"))
         return raw.get("default_provider", self.list_providers()[0].id if self.list_providers() else "")

@@ -6,7 +6,6 @@ Audits the threat model report against security best practices and project requi
 
 import os
 
-from google.adk.agents import Agent
 from pydantic import BaseModel, Field
 
 from shared.utils.agent_factory import create_agent

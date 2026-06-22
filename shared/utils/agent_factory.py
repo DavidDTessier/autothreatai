@@ -1,16 +1,14 @@
-import os
 import logging
-from typing import AsyncGenerator, Optional
+import os
+from collections.abc import AsyncGenerator
 
 from google.adk.agents import Agent
+from google.adk.models import LLMRegistry
 from google.adk.models.base_llm import BaseLlm
 from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
-from google.adk.models import LLMRegistry
 from google.genai import types
-
 from openai import AsyncOpenAI
-import openai
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +23,7 @@ class LocalOpenAILlm(BaseLlm):
 
     def _convert_contents(self, llm_request: LlmRequest) -> list[dict]:
         messages = []
-        
+
         # Add system instruction if present
         if llm_request.config and llm_request.config.system_instruction:
             system_text = ""
@@ -34,7 +32,7 @@ class LocalOpenAILlm(BaseLlm):
             else:
                 system_text = str(llm_request.config.system_instruction)
             messages.append({"role": "system", "content": system_text})
-            
+
         # Convert contents
         for content in llm_request.contents:
             role = "assistant" if content.role == "model" else "user"
@@ -42,19 +40,19 @@ class LocalOpenAILlm(BaseLlm):
             for part in content.parts:
                 if part.text:
                     text_parts.append(part.text)
-            
+
             if text_parts:
                 messages.append({"role": role, "content": "".join(text_parts)})
-                
+
         return messages
 
     async def generate_content_async(
         self, llm_request: LlmRequest, stream: bool = False
     ) -> AsyncGenerator[LlmResponse, None]:
-        
+
         self._maybe_append_user_content(llm_request)
         messages = self._convert_contents(llm_request)
-        
+
         client = AsyncOpenAI(
             base_url=self.base_url,
             api_key=self.api_key
@@ -118,7 +116,7 @@ class DynamicLlm(BaseLlm):
     ) -> AsyncGenerator[LlmResponse, None]:
         # Read the current model from the environment, falling back to the default
         current_model = os.environ.get("GOOGLE_GENAI_MODEL", self.model)
-        
+
         # Override the request's model attribute so the delegate knows which model to request
         llm_request.model = current_model
 

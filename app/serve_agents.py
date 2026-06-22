@@ -18,7 +18,7 @@ from dotenv import load_dotenv  # noqa: E402
 
 load_dotenv()
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 # Agent configuration
@@ -65,7 +65,7 @@ def start_agent(agent_config: dict) -> subprocess.Popen | None:
     logger.info("Starting %s on port %s...", name, port)
 
     # Create wrapper module
-    wrapper_content = f'''import sys
+    wrapper_content = f"""import sys
 from pathlib import Path
 project_root = Path(__file__).parent.parent
 if str(project_root) not in sys.path:
@@ -87,7 +87,7 @@ try:
     app.add_middleware(BaseHTTPMiddleware, dispatch=a2a_card_middleware)
 except ImportError:
     pass
-'''
+"""
 
     wrapper_file = project_root / "app" / f"_agent_wrapper_{agent_name}.py"
     wrapper_file.write_text(wrapper_content)
@@ -102,8 +102,20 @@ except ImportError:
     try:
         with open(log_file, "w", encoding="utf-8") as f:
             process = subprocess.Popen(
-                ["uv", "run", "uvicorn", f"app._agent_wrapper_{agent_name}:app", "--host", "0.0.0.0", "--port", str(port)],
-                cwd=str(project_root), stdout=f, stderr=subprocess.STDOUT, env=env
+                [
+                    "uv",
+                    "run",
+                    "uvicorn",
+                    f"app._agent_wrapper_{agent_name}:app",
+                    "--host",
+                    "0.0.0.0",
+                    "--port",
+                    str(port),
+                ],
+                cwd=str(project_root),
+                stdout=f,
+                stderr=subprocess.STDOUT,
+                env=env,
             )
 
         time.sleep(2)

@@ -6,12 +6,11 @@ Compiles threat model findings into a comprehensive, professional security repor
 
 import os
 
-from google.adk.agents import Agent
-
 from shared.tools.file_writer_tool import convert_markdown_to_pdf, write_file
 from shared.tools.mermaid_to_png import mermaid_to_png
 from shared.utils.agent_factory import create_agent
 from shared.utils.file_loader import load_instructions_file
+
 # Resolve paths relative to this file's directory
 current_dir = os.path.dirname(os.path.abspath(__file__))
 instructions_path = os.path.join(current_dir, "instructions.yaml")

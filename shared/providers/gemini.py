@@ -1,5 +1,6 @@
 import httpx
-from .base import ProviderInterface, ProviderModel, ProviderConfig
+
+from .base import ProviderConfig, ProviderInterface, ProviderModel
 
 
 class GeminiProvider(ProviderInterface):

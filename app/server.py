@@ -10,7 +10,6 @@ import hashlib
 import io
 import json
 import logging
-from shared.utils.security_validator import validate_input_safety
 import os
 import sys
 from contextlib import asynccontextmanager
@@ -23,7 +22,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from PIL import Image
 from pydantic import BaseModel
+
 from shared.providers.registry import ProviderRegistry
+from shared.utils.security_validator import validate_input_safety
 
 _registry = ProviderRegistry.instance()
 
@@ -136,7 +137,7 @@ app = FastAPI(title="AutoThreat AI", lifespan=lifespan)
 app.add_middleware(
     # ⚠️ Whitelist specific origins - don't use ["*"] for production
     CORSMiddleware,
-    allow_origins=os.getenv("ALLOWED_ORIGINS", "http://localhost:8000").split(","), # Whitelist specific origins
+    allow_origins=os.getenv("ALLOWED_ORIGINS", "http://localhost:8000").split(","),  # Whitelist specific origins
     allow_credentials=True,
     allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["Content-Type", "Authorization"],
@@ -145,8 +146,8 @@ app.add_middleware(
 )
 
 # File upload validation
-ALLOWED_MIME_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp']
-ALLOWED_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.webp'}
+ALLOWED_MIME_TYPES = ["image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp"]
+ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
 # Temporary upload directory
@@ -212,7 +213,9 @@ async def serve_asset(filename: str):
     file_path = (assets_dir / filename).resolve()
     if not file_path.is_file() or not str(file_path).startswith(str(assets_dir.resolve())):
         raise HTTPException(status_code=404, detail="Not found")
-    media_type = "text/css" if filename.endswith(".css") else "application/javascript" if filename.endswith(".js") else None
+    media_type = (
+        "text/css" if filename.endswith(".css") else "application/javascript" if filename.endswith(".js") else None
+    )
     headers = {"Cache-Control": "public, max-age=0"} if media_type else None
     return FileResponse(str(file_path), media_type=media_type, headers=headers)
 
@@ -238,7 +241,7 @@ async def create_session():
                     "threat_model_orchestrator",
                     "threat_modeller_orchestrator",
                     "orchestrator",
-                    "threat_model_orchestrator_agent"
+                    "threat_model_orchestrator_agent",
                 ]
 
                 for candidate in orchestrator_candidates:
@@ -254,8 +257,17 @@ async def create_session():
                             logger.info("Session created successfully with agent: %s", candidate)
                             return result
                         else:
-                            error_text = session_response.text[:500] if session_response.text else str(session_response.status_code)
-                            logger.warning("Failed to create session with %s: %s - %s", candidate, session_response.status_code, error_text)
+                            error_text = (
+                                session_response.text[:500]
+                                if session_response.text
+                                else str(session_response.status_code)
+                            )
+                            logger.warning(
+                                "Failed to create session with %s: %s - %s",
+                                candidate,
+                                session_response.status_code,
+                                error_text,
+                            )
     except Exception as e:
         logger.warning("Could not list apps, trying direct connection: %s", e)
 
@@ -282,12 +294,13 @@ async def create_session():
     # If we get here, both attempts failed
     raise HTTPException(
         status_code=503,
-        detail=f"Cannot connect to orchestrator. Tried both {AGENT_NAME} and {AGENT_NAME_ALT}. Check that the orchestrator is running on {ORCHESTRATOR_URL} and accessible."
+        detail=f"Cannot connect to orchestrator. Tried both {AGENT_NAME} and {AGENT_NAME_ALT}. Check that the orchestrator is running on {ORCHESTRATOR_URL} and accessible.",
     )
 
 
 class QueryRequest(BaseModel):
     """Request model for query endpoint."""
+
     user_id: str = "web_user"
     session_id: str
     message: str | None = ""  # Optional text message (for backward compatibility)
@@ -351,7 +364,6 @@ async def stream_query(request: QueryRequest):
     # Provider‑specific credential checks – defer to the provider implementation.
     # The provider itself (or agent overrides) will validate; we let it fall through
     # so that the orchestrator can use its configured keys.
-    is_local = request.provider_id and request.provider_id.startswith('local')
 
     request_payload_creds: dict[str, Any] = {}
     if request.api_key:
@@ -372,7 +384,7 @@ async def stream_query(request: QueryRequest):
         8003: "meastro",
         8004: "builder",
         8005: "verifier",
-        8006: "orchestrator"
+        8006: "orchestrator",
     }
 
     base = ORCHESTRATOR_URL.rstrip("/").rsplit(":", 1)[0] if ":" in ORCHESTRATOR_URL else "http://localhost"
@@ -431,7 +443,7 @@ async def stream_query(request: QueryRequest):
         logger.error("set-api-key request failed: %s", e)
         raise HTTPException(
             status_code=503,
-            detail=f"Cannot set API key on orchestrator: {e!s}. If using Docker, ensure orchestrator is running and rebuilt."
+            detail=f"Cannot set API key on orchestrator: {e!s}. If using Docker, ensure orchestrator is running and rebuilt.",
         ) from e
 
     client = httpx.AsyncClient(timeout=300.0)
@@ -456,15 +468,20 @@ async def stream_query(request: QueryRequest):
                         preview_parts.append(f"text: {text[:30]}..." if len(text) > 30 else f"text: {text}")
                     elif "inlineData" in part:
                         inline_data = part.get("inlineData") or {}
-                        mime_type = inline_data.get("mimeType", "unknown") if isinstance(inline_data, dict) else "unknown"
+                        mime_type = (
+                            inline_data.get("mimeType", "unknown") if isinstance(inline_data, dict) else "unknown"
+                        )
                         preview_parts.append(f"image: {mime_type}")
 
-                logger.info("Sending request to orchestrator with payload: %s", {
-                    "app_name": request_payload["app_name"],
-                    "user_id": request_payload["user_id"],
-                    "session_id": request_payload["session_id"],
-                    "message_parts": preview_parts,
-                })
+                logger.info(
+                    "Sending request to orchestrator with payload: %s",
+                    {
+                        "app_name": request_payload["app_name"],
+                        "user_id": request_payload["user_id"],
+                        "session_id": request_payload["session_id"],
+                        "message_parts": preview_parts,
+                    },
+                )
 
                 async with client.stream(
                     "POST",
@@ -485,7 +502,7 @@ async def stream_query(request: QueryRequest):
                                 error_chunks.append(chunk)
                             if error_chunks:
                                 error_body = b"".join(error_chunks)
-                                error_text = error_body.decode('utf-8', errors='replace')
+                                error_text = error_body.decode("utf-8", errors="replace")
                         except Exception as e:
                             logger.warning("Could not read error body: %s", e)
 
@@ -501,7 +518,7 @@ async def stream_query(request: QueryRequest):
                             if chunk:
                                 # Decode and yield immediately - no buffering
                                 try:
-                                    decoded = chunk.decode('utf-8', errors='replace')
+                                    decoded = chunk.decode("utf-8", errors="replace")
                                     yield decoded
                                 except UnicodeDecodeError:
                                     # Skip invalid UTF-8 sequences
@@ -525,7 +542,7 @@ async def stream_query(request: QueryRequest):
                 "Connection": "keep-alive",
                 "X-Accel-Buffering": "no",
                 "X-Content-Type-Options": "nosniff",
-            }
+            },
         )
     except HTTPException:
         raise
@@ -559,14 +576,15 @@ async def upload_file(file: UploadFile = File(...)):
 
         # Check file size
         if len(contents) > MAX_FILE_SIZE:
-            raise HTTPException(status_code=413, detail=f"File too large. Maximum size is {MAX_FILE_SIZE / (1024*1024):.0f}MB")
+            raise HTTPException(
+                status_code=413, detail=f"File too large. Maximum size is {MAX_FILE_SIZE / (1024*1024):.0f}MB"
+            )
 
         # Validate file extension
         file_ext = Path(file.filename).suffix.lower() if file.filename else ""
         if file_ext not in ALLOWED_EXTENSIONS:
             raise HTTPException(
-                status_code=400,
-                detail=f"Invalid file type. Allowed types: {', '.join(ALLOWED_EXTENSIONS)}"
+                status_code=400, detail=f"Invalid file type. Allowed types: {', '.join(ALLOWED_EXTENSIONS)}"
             )
 
         # Validate MIME type from file content using Pillow
@@ -576,12 +594,12 @@ async def upload_file(file: UploadFile = File(...)):
 
             # Get actual format from Pillow
             img_format = img.format.lower() if img.format else ""
-            valid_formats = {'png', 'jpeg', 'jpg', 'gif', 'webp'}
+            valid_formats = {"png", "jpeg", "jpg", "gif", "webp"}
 
             if img_format not in valid_formats:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Invalid image format detected: {img_format}. Allowed formats: {', '.join(valid_formats)}"
+                    detail=f"Invalid image format detected: {img_format}. Allowed formats: {', '.join(valid_formats)}",
                 )
 
             # Reopen image after verify() (verify() closes the image)
@@ -593,19 +611,19 @@ async def upload_file(file: UploadFile = File(...)):
             if width > max_dimension or height > max_dimension:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Image dimensions too large. Maximum: {max_dimension}x{max_dimension} pixels"
+                    detail=f"Image dimensions too large. Maximum: {max_dimension}x{max_dimension} pixels",
                 )
 
             # Validate MIME type matches file extension
             mime_type_map = {
-                'png': 'image/png',
-                'jpeg': 'image/jpeg',
-                'jpg': 'image/jpeg',
-                'gif': 'image/gif',
-                'webp': 'image/webp'
+                "png": "image/png",
+                "jpeg": "image/jpeg",
+                "jpg": "image/jpeg",
+                "gif": "image/gif",
+                "webp": "image/webp",
             }
 
-            detected_mime = mime_type_map.get(img_format, '')
+            detected_mime = mime_type_map.get(img_format, "")
             if detected_mime not in ALLOWED_MIME_TYPES:
                 raise HTTPException(status_code=400, detail="MIME type validation failed")
 
@@ -629,7 +647,7 @@ async def upload_file(file: UploadFile = File(...)):
         # Save file with secure permissions (optional, for audit trail)
         # In production, you might want to store these temporarily and clean up
         try:
-            with open(file_path, 'wb') as f:
+            with open(file_path, "wb") as f:
                 f.write(contents)
             # Set restrictive permissions (owner read/write only)
             os.chmod(file_path, 0o600)
@@ -638,19 +656,21 @@ async def upload_file(file: UploadFile = File(...)):
             # Continue even if save fails - we still have contents in memory
 
         # Convert to base64 for use in message_parts
-        base64_data = base64.b64encode(contents).decode('utf-8')
+        base64_data = base64.b64encode(contents).decode("utf-8")
 
         logger.info("File uploaded successfully: %s (%d bytes, %s)", file.filename, len(contents), detected_mime)
 
-        return JSONResponse({
-            "status": "success",
-            "mimeType": detected_mime,
-            "data": base64_data,
-            "filename": file.filename,  # Original filename
-            "serverFilename": safe_filename,  # Server-side filename for cleanup
-            "size": len(contents),
-            "dimensions": {"width": width, "height": height}
-        })
+        return JSONResponse(
+            {
+                "status": "success",
+                "mimeType": detected_mime,
+                "data": base64_data,
+                "filename": file.filename,  # Original filename
+                "serverFilename": safe_filename,  # Server-side filename for cleanup
+                "size": len(contents),
+                "dimensions": {"width": width, "height": height},
+            }
+        )
 
     except HTTPException:
         raise
@@ -669,7 +689,7 @@ async def delete_uploaded_file(filename: str):
     """
     try:
         # Validate filename to prevent path traversal
-        if not filename.startswith('upload_') or '..' in filename or '/' in filename or '\\' in filename:
+        if not filename.startswith("upload_") or ".." in filename or "/" in filename or "\\" in filename:
             raise HTTPException(status_code=400, detail="Invalid filename")
 
         # Normalize path and ensure it's within uploads directory
@@ -688,10 +708,7 @@ async def delete_uploaded_file(filename: str):
         try:
             file_path.unlink()
             logger.info("Deleted uploaded file: %s", filename)
-            return JSONResponse({
-                "status": "success",
-                "message": f"File {filename} deleted successfully"
-            })
+            return JSONResponse({"status": "success", "message": f"File {filename} deleted successfully"})
         except OSError as e:
             logger.error("Error deleting file %s: %s", filename, e)
             raise HTTPException(status_code=500, detail="Failed to delete file") from e
@@ -724,14 +741,11 @@ async def fetch_local_models():
                 for model in data.get("models", []):
                     name = model.get("name")
                     if name:
-                        models.append({
-                            "id": f"local/{name}",
-                            "label": f"Local: {name}",
-                            "provider": "local"
-                        })
+                        models.append({"id": f"local/{name}", "label": f"Local: {name}", "provider": "local"})
     except Exception as e:
         logger.debug(f"Could not fetch local models (Ollama not running or unreachable): {e}")
     return models
+
 
 @app.get("/api/config")
 async def get_config():
@@ -753,6 +767,7 @@ async def get_config():
         "default_provider": _registry.default_provider(),
     }
 
+
 @app.get("/api/providers")
 async def get_providers():
     """Return list of configured model providers for the UI."""
@@ -767,6 +782,7 @@ async def get_providers():
     ]
     return {"providers": providers, "default_provider": _registry.default_provider()}
 
+
 # Provider config update endpoint – allows UI to edit API keys, base URLs, etc.
 class ProviderConfigUpdate(BaseModel):
     provider_id: str
@@ -774,6 +790,7 @@ class ProviderConfigUpdate(BaseModel):
     base_url: str | None = None
     default_model: str | None = None
     enabled: bool | None = None
+
 
 class AgentProviderConfigUpdate(BaseModel):
     agent_id: str
@@ -783,13 +800,14 @@ class AgentProviderConfigUpdate(BaseModel):
     default_model: str | None = None
     enabled: bool | None = None
 
+
 class ValidateCredentialRequest(BaseModel):
     provider_id: str
     api_key: str | None = None
     base_url: str | None = None
 
-@app.post("/api/provider-config")
 
+@app.post("/api/provider-config")
 @app.post("/api/agent-provider-config")
 async def update_agent_provider_config(update: AgentProviderConfigUpdate):
     """Update per‑agent provider overrides in ``config/providers.json``.
@@ -799,7 +817,7 @@ async def update_agent_provider_config(update: AgentProviderConfigUpdate):
     if not config_path.exists():
         raise HTTPException(status_code=500, detail="Provider config file missing")
     # Load existing config
-    with open(config_path, "r", encoding="utf-8") as f:
+    with open(config_path, encoding="utf-8") as f:
         data = json.load(f)
     overrides = data.get("agent_overrides", {})
     agent_id = update.agent_id
@@ -832,7 +850,6 @@ async def validate_credential(request: ValidateCredentialRequest):
     """Validate API key format for a provider before accepting config updates."""
     provider_id = request.provider_id
     api_key = request.api_key
-    base_url = request.base_url
 
     # Basic validation
     if provider_id not in ["gemini", "anthropic", "local"]:
@@ -873,7 +890,7 @@ async def update_provider_config(update: ProviderConfigUpdate):
         raise HTTPException(status_code=500, detail="Provider config file missing")
 
     # Load existing config
-    with open(config_path, "r", encoding="utf-8") as f:
+    with open(config_path, encoding="utf-8") as f:
         data = json.load(f)
 
     providers = data.get("providers", [])
@@ -934,7 +951,7 @@ async def get_latest_pdf():
     return {
         "file_path": str(latest_pdf.relative_to(project_root)),
         "filename": latest_pdf.name,
-        "created": latest_pdf.stat().st_mtime
+        "created": latest_pdf.stat().st_mtime,
     }
 
 
@@ -942,27 +959,25 @@ async def get_latest_pdf():
 async def download_report(filename: str):
     """Download a report file."""
     # Security: Only allow PDF files from reports directory
-    if not filename.endswith('.pdf') or not filename.startswith('report_'):
+    if not filename.endswith(".pdf") or not filename.startswith("report_"):
         raise HTTPException(status_code=400, detail="Invalid filename")
 
-     # Normalize path and ensure it's within reports directory
+    # Normalize path and ensure it's within reports directory
     file_path = (project_root / "reports" / filename).resolve()
     reports_dir = (project_root / "reports").resolve()
 
-     # Prevent path traversal
+    # Prevent path traversal
     if not str(file_path).startswith(str(reports_dir)):
         raise HTTPException(status_code=403, detail="Access denied")
 
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found")
 
-    return FileResponse(
-        path=str(file_path),
-        filename=filename,
-        media_type="application/pdf"
-    )
+    return FileResponse(path=str(file_path), filename=filename, media_type="application/pdf")
+
 
 if __name__ == "__main__":
     import uvicorn
+
     port = int(os.getenv("PORT", "8000"))
     uvicorn.run(app, host="0.0.0.0", port=port)

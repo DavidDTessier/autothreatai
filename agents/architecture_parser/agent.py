@@ -6,8 +6,6 @@ Analyzes system architecture diagrams and documentation to identify trust bounda
 
 import os
 
-from google.adk.agents import Agent
-
 from shared.utils.agent_factory import create_agent
 from shared.utils.file_loader import load_instructions_file
 
