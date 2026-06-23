@@ -1,4 +1,5 @@
 import httpx
+import os
 
 from .base import ProviderConfig, ProviderInterface, ProviderModel
 
@@ -7,12 +8,30 @@ class LocalProvider(ProviderInterface):
     """Provider for local models via Ollama or LLMStudio-compatible APIs."""
 
     def __init__(self, config: ProviderConfig | None = None):
-        self._config = config or ProviderConfig(
-            id="local",
-            name="Local Model",
-            base_url="http://localhost:11434",
-            enabled=True,
-        )
+        # Determine base_url: environment variable > config > default
+        base_url = os.getenv("OLLAMA_BASE_URL")
+        if base_url is None and config is not None:
+            base_url = config.base_url
+        if base_url is None:
+            base_url = "http://localhost:11434"
+
+        # Create config with resolved base_url, preserving other settings
+        if config is not None:
+            self._config = ProviderConfig(
+                id=config.id,
+                name=config.name,
+                base_url=base_url,
+                api_key=config.api_key,
+                default_model=config.default_model,
+                enabled=config.enabled,
+            )
+        else:
+            self._config = ProviderConfig(
+                id="local",
+                name="Local Model",
+                base_url=base_url,
+                enabled=True,
+            )
         self._client = httpx.AsyncClient(timeout=30.0)
 
     @property
