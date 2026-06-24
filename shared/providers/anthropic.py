@@ -29,11 +29,7 @@ class AnthropicProvider(ProviderInterface):
 
     def get_models(self) -> list[ProviderModel]:
         return [
-            ProviderModel(
-                id=f"anthropic/{m['id']}",
-                label=f"Anthropic: {m['label']}",
-                provider="anthropic"
-            )
+            ProviderModel(id=f"anthropic/{m['id']}", label=f"Anthropic: {m['label']}", provider="anthropic")
             for m in self.DEFAULT_MODELS
         ]
 
@@ -48,9 +44,7 @@ class AnthropicProvider(ProviderInterface):
         payload = {
             "model": model_id.replace("anthropic/", ""),
             "messages": [
-                {"role": m["role"], "content": m["content"]}
-                for m in messages
-                if m["role"] in ("user", "assistant")
+                {"role": m["role"], "content": m["content"]} for m in messages if m["role"] in ("user", "assistant")
             ],
             "max_tokens": options.get("max_tokens", 1024),
         }

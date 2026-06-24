@@ -20,7 +20,7 @@ meastro_threat_modeler_agent = create_agent(
     instruction=load_instructions_file(instructions_path),
     output_key="raw_threat_model",
     model=MODEL_NAME,
-    tools=[google_search]
+    tools=[google_search],
 )
 
 root_agent = meastro_threat_modeler_agent

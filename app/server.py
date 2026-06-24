@@ -577,7 +577,7 @@ async def upload_file(file: UploadFile = File(...)):
         # Check file size
         if len(contents) > MAX_FILE_SIZE:
             raise HTTPException(
-                status_code=413, detail=f"File too large. Maximum size is {MAX_FILE_SIZE / (1024*1024):.0f}MB"
+                status_code=413, detail=f"File too large. Maximum size is {MAX_FILE_SIZE / (1024 * 1024):.0f}MB"
             )
 
         # Validate file extension

@@ -24,7 +24,7 @@ report_builder_agent = create_agent(
     instruction=load_instructions_file(instructions_path),
     output_key="threat_model_report_content",
     model=MODEL_NAME,
-    tools=[write_file, convert_markdown_to_pdf, mermaid_to_png]
+    tools=[write_file, convert_markdown_to_pdf, mermaid_to_png],
 )
 
 root_agent = report_builder_agent

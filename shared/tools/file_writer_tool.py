@@ -27,20 +27,14 @@ def write_file(content: str) -> dict:
         if directory and not os.path.exists(directory):
             os.makedirs(directory, exist_ok=True)
 
-        with open(file_path, 'w', encoding='utf-8') as f:
+        with open(file_path, "w", encoding="utf-8") as f:
             f.write(content)
 
         logging.info("Successfully saved file: %s", file_path)
-        return {
-            "status": "success",
-            "file_path": file_path
-        }
+        return {"status": "success", "file_path": file_path}
     except (OSError, TypeError, ValueError) as e:
         logging.error("Error writing file %s: %s", file_path, e)
-        return {
-            "status": "error",
-            "error": str(e)
-        }
+        return {"status": "error", "error": str(e)}
 
 
 def convert_markdown_to_pdf(content: str) -> dict:
@@ -71,13 +65,7 @@ def convert_markdown_to_pdf(content: str) -> dict:
         pdf.save(file_path)
         logging.info("Successfully saved PDF: %s", file_path)
 
-        return {
-            "status": "success",
-            "file_path": file_path
-        }
+        return {"status": "success", "file_path": file_path}
     except (OSError, TypeError, ValueError) as e:
         logging.error("Error writing PDF %s: %s", file_path, e)
-        return {
-            "status": "error",
-            "error": str(e)
-        }
+        return {"status": "error", "error": str(e)}

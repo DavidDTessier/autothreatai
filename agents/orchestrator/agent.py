@@ -40,9 +40,7 @@ class ThreatModelerRouter(Agent):
         self._meastro = meastro_threat_modeler
         self._standard = threat_modeler
 
-    async def _run_async_impl(
-        self, ctx: InvocationContext
-    ) -> AsyncGenerator[Event, None]:
+    async def _run_async_impl(self, ctx: InvocationContext) -> AsyncGenerator[Event, None]:
         state = ctx.session.state or {}
         if state.get("report_verification_status") is None:
             state["report_verification_status"] = "draft"
@@ -68,6 +66,7 @@ threat_modeler_router = ThreatModelerRouter(
 
 # Define the remote agents
 
+
 class EscalationChecker(Agent):
     """
     Checks the verifier's feedback status to determine if the report is acceptable.
@@ -79,9 +78,7 @@ class EscalationChecker(Agent):
     - If status is not "pass", returns continue signal to loop again.
     """
 
-    async def _run_async_impl(
-        self, ctx: InvocationContext
-    ) -> AsyncGenerator[Event, None]:
+    async def _run_async_impl(self, ctx: InvocationContext) -> AsyncGenerator[Event, None]:
         """Check verification status and escalate if approved."""
         state = ctx.session.state or {}
         feedback: Any = state.get("verification_feedback")
@@ -102,6 +99,7 @@ class EscalationChecker(Agent):
         else:
             yield Event(author=self.name)
 
+
 escalation_checker_agent = EscalationChecker(name="escalation_checker")
 
 
@@ -117,9 +115,7 @@ class FinalReportBuilderRunner(Agent):
         super().__init__(**kwargs)
         self._report_builder = report_builder
 
-    async def _run_async_impl(
-        self, ctx: InvocationContext
-    ) -> AsyncGenerator[Event, None]:
+    async def _run_async_impl(self, ctx: InvocationContext) -> AsyncGenerator[Event, None]:
         state = ctx.session.state or {}
         if state.get("report_verification_status") is None and state.get("verification_feedback") is not None:
             feedback = state["verification_feedback"]
@@ -142,12 +138,8 @@ final_report_builder_runner = FinalReportBuilderRunner(
 # This loop continues until the escalation checker signals completion (when status == "pass")
 verification_loop = LoopAgent(
     name="verification_loop",
-   description="Loops between report builder, report verifier, and escalation checker until report is approved",
-    sub_agents=[
-        report_builder,
-        report_verifier,
-        escalation_checker_agent
-    ],
+    description="Loops between report builder, report verifier, and escalation checker until report is approved",
+    sub_agents=[report_builder, report_verifier, escalation_checker_agent],
     # The loop continues until the verifier approves the report or hits max iterations
     max_iterations=3,
 )
@@ -162,5 +154,5 @@ root_agent = SequentialAgent(
         threat_modeler_router,
         verification_loop,
         final_report_builder_runner,
-    ]
+    ],
 )

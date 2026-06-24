@@ -53,11 +53,7 @@ class LocalProvider(ProviderInterface):
                 for m in data.get("models", []):
                     name = m.get("name")
                     if name:
-                        models.append(ProviderModel(
-                            id=f"local/{name}",
-                            label=f"Local: {name}",
-                            provider="local"
-                        ))
+                        models.append(ProviderModel(id=f"local/{name}", label=f"Local: {name}", provider="local"))
                 return models
         except Exception:
             pass
@@ -74,9 +70,6 @@ class LocalProvider(ProviderInterface):
             "stream": False,
         }
 
-        resp = await self._client.post(
-            f"{self._config.base_url}/api/generate",
-            json=payload
-        )
+        resp = await self._client.post(f"{self._config.base_url}/api/generate", json=payload)
         resp.raise_for_status()
         return resp.json().get("response", "")

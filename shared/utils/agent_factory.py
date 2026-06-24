@@ -12,11 +12,13 @@ from openai import AsyncOpenAI
 
 logger = logging.getLogger(__name__)
 
+
 class LocalOpenAILlm(BaseLlm):
     """
     Custom BaseLlm adapter that sends generation requests to an OpenAI-compatible
     endpoint (e.g., Ollama, vLLM) using the openai Python SDK.
     """
+
     model: str
     base_url: str = os.getenv("LOCAL_MODEL_BASE_URL", "http://localhost:11434/v1")
     api_key: str = "ollama"
@@ -53,10 +55,7 @@ class LocalOpenAILlm(BaseLlm):
         self._maybe_append_user_content(llm_request)
         messages = self._convert_contents(llm_request)
 
-        client = AsyncOpenAI(
-            base_url=self.base_url,
-            api_key=self.api_key
-        )
+        client = AsyncOpenAI(base_url=self.base_url, api_key=self.api_key)
 
         try:
             # We currently do not support tool calling in this simple local adapter
@@ -73,35 +72,24 @@ class LocalOpenAILlm(BaseLlm):
                     if content:
                         yield LlmResponse(
                             partial=True,
-                            content=types.Content(
-                                role="model",
-                                parts=[types.Part.from_text(text=content)]
-                            )
+                            content=types.Content(role="model", parts=[types.Part.from_text(text=content)]),
                         )
                 # Yield final complete response block
                 yield LlmResponse(
                     partial=False,
                     content=types.Content(
                         role="model",
-                        parts=[types.Part.from_text(text="")] # Simplified for streaming
-                    )
+                        parts=[types.Part.from_text(text="")],  # Simplified for streaming
+                    ),
                 )
             else:
                 content = response.choices[0].message.content if response.choices else ""
                 yield LlmResponse(
-                    partial=False,
-                    content=types.Content(
-                        role="model",
-                        parts=[types.Part.from_text(text=content or "")]
-                    )
+                    partial=False, content=types.Content(role="model", parts=[types.Part.from_text(text=content or "")])
                 )
         except Exception as e:
             logger.error(f"Error calling local model {self.model}: {e}")
-            yield LlmResponse(
-                error_code="LOCAL_MODEL_ERROR",
-                error_message=str(e),
-                partial=False
-            )
+            yield LlmResponse(error_code="LOCAL_MODEL_ERROR", error_message=str(e), partial=False)
 
 
 class DynamicLlm(BaseLlm):
@@ -109,6 +97,7 @@ class DynamicLlm(BaseLlm):
     Custom BaseLlm adapter that checks os.environ["GOOGLE_GENAI_MODEL"]
     at query time and delegates to the appropriate provider (Gemini or LocalOpenAILlm).
     """
+
     model: str = "gemini-3-flash-preview"
 
     async def generate_content_async(
@@ -136,13 +125,7 @@ class DynamicLlm(BaseLlm):
 
 
 def create_agent(
-    name: str,
-    description: str,
-    instruction: str,
-    model: str,
-    output_key: str = None,
-    tools: list = None,
-    **kwargs
+    name: str, description: str, instruction: str, model: str, output_key: str = None, tools: list = None, **kwargs
 ) -> Agent:
     """
     Factory method to create an ADK Agent using the DynamicLlm adapter.
@@ -158,5 +141,5 @@ def create_agent(
         output_key=output_key,
         model=dynamic_llm,
         tools=tools,
-        **kwargs
+        **kwargs,
     )

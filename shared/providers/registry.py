@@ -9,6 +9,7 @@ from .local import LocalProvider
 # Resolve config path relative to project root (where config/providers.json lives)
 CONFIG_PATH = Path(__file__).resolve().parents[2] / "config" / "providers.json"
 
+
 class ProviderRegistry:
     """Singleton registry that loads provider configs and instantiates adapters.
 

@@ -18,15 +18,16 @@ instructions_path = os.path.join(current_dir, "instructions.yaml")
 DEFAULT_MODEL = "gemini-3-flash-preview"
 MODEL_NAME = os.environ.get("GOOGLE_GENAI_MODEL", DEFAULT_MODEL)
 
+
 # Define the Schema
 class VerifierFeedback(BaseModel):
     """Structured feedback from the Verifier agent."""
+
     status: str = Field(
         description="Whether the threat model report is sufficient ('pass') or needs more work ('fail')."
     )
-    feedback: str = Field(
-        description="Detailed feedback on what is missing. If 'pass', a brief confirmation."
-    )
+    feedback: str = Field(description="Detailed feedback on what is missing. If 'pass', a brief confirmation.")
+
 
 report_verifier_agent = create_agent(
     name="report_verifier_agent",

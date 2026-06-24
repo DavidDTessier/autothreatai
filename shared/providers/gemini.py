@@ -30,14 +30,7 @@ class GeminiProvider(ProviderInterface):
         return self._config
 
     def get_models(self) -> list[ProviderModel]:
-        return [
-            ProviderModel(
-                id=m["id"],
-                label=m["label"],
-                provider="google"
-            )
-            for m in self.DEFAULT_MODELS
-        ]
+        return [ProviderModel(id=m["id"], label=m["label"], provider="google") for m in self.DEFAULT_MODELS]
 
     async def generate(self, messages: list[dict], **options) -> str:
         """Generate text via Gemini API."""
