@@ -1,6 +1,7 @@
 import logging
 import os
 from collections.abc import AsyncGenerator
+from typing import Any
 
 from google.adk.agents import Agent
 from google.adk.models import LLMRegistry
@@ -124,8 +125,15 @@ class DynamicLlm(BaseLlm):
                 yield chunk
 
 
+
 def create_agent(
-    name: str, description: str, instruction: str, model: str, output_key: str = None, tools: list = None, **kwargs
+    name: str,
+    description: str,
+    instruction: str,
+    model: str,
+    output_key: str | None = None,
+    tools: list[Any] | None = None,
+    **kwargs,
 ) -> Agent:
     """
     Factory method to create an ADK Agent using the DynamicLlm adapter.
