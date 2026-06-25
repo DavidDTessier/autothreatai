@@ -40,7 +40,7 @@ class LocalOpenAILlm(BaseLlm):
         for content in llm_request.contents:
             role = "assistant" if content.role == "model" else "user"
             text_parts = []
-            for part in content.parts:
+            for part in (content.parts or []):
                 if part.text:
                     text_parts.append(part.text)
 
