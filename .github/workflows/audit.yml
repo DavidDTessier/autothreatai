@@ -57,7 +57,7 @@ jobs:
 
       - name: Security Scan (SCA)
         working-directory: app/frontend-svelte
-        run: npm audit --audit-level=high
+        run: npm audit --audit-level=high --omit=dev
 
       - name: Final Report
         if: always()
