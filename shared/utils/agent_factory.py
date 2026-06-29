@@ -1,7 +1,7 @@
 import logging
 import os
 from collections.abc import AsyncGenerator
-from typing import Any
+from typing import Any, cast
 
 from google.adk.agents import Agent
 from google.adk.models import LLMRegistry
@@ -10,6 +10,7 @@ from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
 from google.genai import types
 from openai import AsyncOpenAI
+from openai.types.chat import ChatCompletionSystemMessageParam, ChatCompletionUserMessageParam, ChatCompletionAssistantMessageParam
 
 logger = logging.getLogger(__name__)
 
@@ -24,8 +25,8 @@ class LocalOpenAILlm(BaseLlm):
     base_url: str = os.getenv("LOCAL_MODEL_BASE_URL", "http://localhost:11434/v1")
     api_key: str = "ollama"
 
-    def _convert_contents(self, llm_request: LlmRequest) -> list[dict]:
-        messages = []
+    def _convert_contents(self, llm_request: LlmRequest) -> list[ChatCompletionSystemMessageParam | ChatCompletionUserMessageParam | ChatCompletionAssistantMessageParam]:
+        messages: list[ChatCompletionSystemMessageParam | ChatCompletionUserMessageParam | ChatCompletionAssistantMessageParam] = []
 
         # Add system instruction if present
         if llm_request.config and llm_request.config.system_instruction:
@@ -45,7 +46,13 @@ class LocalOpenAILlm(BaseLlm):
                     text_parts.append(part.text)
 
             if text_parts:
-                messages.append({"role": role, "content": "".join(text_parts)})
+                content_dict = {"role": role, "content": "".join(text_parts)}
+                if role == "system":
+                    messages.append(cast(ChatCompletionSystemMessageParam, content_dict))
+                elif role == "user":
+                    messages.append(cast(ChatCompletionUserMessageParam, content_dict))
+                else:
+                    messages.append(cast(ChatCompletionAssistantMessageParam, content_dict))
 
         return messages
 
@@ -60,33 +67,37 @@ class LocalOpenAILlm(BaseLlm):
 
         try:
             # We currently do not support tool calling in this simple local adapter
-            response = await client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                stream=stream,
-                temperature=llm_request.config.temperature if llm_request.config else None,
-            )
-
             if stream:
-                async for chunk in response:
-                    content = chunk.choices[0].delta.content if chunk.choices else ""
-                    if content:
+                # Explicitly create async generator for streaming
+                stream_response = await client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    stream=True,
+                    temperature=llm_request.config.temperature if llm_request.config else None,
+                )
+                async for chunk in stream_response:
+                    if not chunk.choices:
+                        continue
+                    delta_content = chunk.choices[0].delta.content or ""
+                    if delta_content:
                         yield LlmResponse(
                             partial=True,
-                            content=types.Content(role="model", parts=[types.Part.from_text(text=content)]),
+                            content=types.Content(role="model", parts=[types.Part.from_text(text=delta_content)])
                         )
-                # Yield final complete response block
-                yield LlmResponse(
-                    partial=False,
-                    content=types.Content(
-                        role="model",
-                        parts=[types.Part.from_text(text="")],  # Simplified for streaming
-                    ),
-                )
+                # Stream is complete
+                yield LlmResponse(partial=False, content=types.Content())
             else:
+                # Non-streaming response
+                response = await client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    stream=False,
+                    temperature=llm_request.config.temperature if llm_request.config else None,
+                )
                 content = response.choices[0].message.content if response.choices else ""
                 yield LlmResponse(
-                    partial=False, content=types.Content(role="model", parts=[types.Part.from_text(text=content or "")])
+                    partial=False,
+                    content=types.Content(role="model", parts=[types.Part.from_text(text=content or "")])
                 )
         except Exception as e:
             logger.error(f"Error calling local model {self.model}: {e}")
