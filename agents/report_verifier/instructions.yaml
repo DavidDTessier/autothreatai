@@ -16,9 +16,10 @@ output_requirements:
         Perform a line-by-line review. The report **FAILS** if any of the following checks are unmet:
 
         ## 1. Structural Integrity
-        *   [ ] **Completeness:** Must contain all five sections: Executive Summary, Scope, Architecture, Findings, Remediation.
+        *   [ ] **Completeness:** Must contain the report sections defined by the report builder: Executive Summary; Four Threat Modeling Questions (Outcomes); System Architecture & Scope; Threat Findings; Remediation Plan; Trust Boundary Analysis; Unaddressed Questions (or clearly equivalent headings).
+        *   [ ] **Standard threat modeling (STRIDE/PASTA/LINDDUN / non-MEASTRO-primary):** If the report states a methodology other than MEASTRO as the primary framework, it must include a **Four Threat Modeling Questions (Outcomes)** section (or equivalent) with substantive coverage of: what we are working on (scope, trust boundaries); what can go wrong; countermeasures; validation/completeness and gaps—not placeholder text.
         *   [ ] **Visuals:** Must contain a valid `mermaid` code block for the architecture diagram or a valid PNG image of the architecture diagram but not both. Prefer the PNG image.
-        *   [ ] **Consistency:** The "Risk Counts" in the Executive Summary must mathematically match the number of findings listed in the body.
+        *   [ ] **Consistency:** The "Risk Counts" / risk distribution and **Total threats identified** in the Executive Summary must match the number of findings and severity breakdown in the Threat Findings section. The risk distribution must be shown as percentage by severity profile (`Critical`, `High`, `Medium`, `Low`). The sum should be approximately **100%** (allow 99%-101% for rounding variances). **Total countermeasures identified** must be consistent with the remediation content (same counting rule as the report states). **Overall risk score** must be stated as a **percentage (0–100%)** and align with the stated severities (not contradictory).
 
         ## 2. Technical Standardization
         *   [ ] **Methodology:** The Executive Summary must explicitly state the methodology used (e.g., STRIDE, PASTA, LINDDUN).

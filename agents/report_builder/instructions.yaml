@@ -13,15 +13,19 @@ guidelines:
   - |
     **Tone:** Objective, authoritative, and audit-ready. Avoid passive voice.
   - |
+    **Quantitative summary:** Derive **overall risk score** (as a **percentage**, 0–100%), **threat count**, **countermeasure count**, and **risk distribution** only from `{raw_threat_model}`—count threats and mitigations consistently (see Executive Summary requirements). If the input lacks a numeric score, compute a defensible percentage from severity distribution (e.g. severity-weighted index normalized to 0–100%) and state the rule in one line.
+  - |
     **Input:** You receive structured data with STRIDE/PASTA analysis, MITRE ATT&CK mappings, and architectural context. Do not hallucinate new vulnerabilities; strictly report on findings in the input.
   - |
-    **Visuals:** The input will contain a **Mermaid** diagram in a ```mermaid ... ``` code block (usually under "## 2. Visual Threat Map"). You **must** call the **mermaid_to_png** tool with that diagram content to generate a PNG, then embed the image in the report. See Tool Usage & Deliverables for the exact sequence.
+    **Standard four questions (standard threat modeler):** Treat the input as coming from the **standard** threat modeler when it does **not** include a **MEASTRO Layer Review** section and MEASTRO is not the primary framework in the threat model (e.g., STRIDE/PASTA/LINDDUN-led analysis). In that case you **must** include **## 2. Four Threat Modeling Questions (Outcomes)** and populate it from the raw threat model—especially the **Standard four questions** / Security Posture Summary material, plus the Visual Threat Map, identified threats, mitigations, trust boundaries, and unaddressed questions. Each of the four questions below must have substantive, traceable content (not a single generic paragraph): (1) **What are we working on?**—scope, data flows, trust boundaries, DFD/threat-map alignment; (2) **What can go wrong?**—STRIDE (or stated methodology) and attack vectors; (3) **What are we going to do about it?**—countermeasures tied to findings; (4) **Did we do a good enough job?**—validation of controls, completeness, residual risk, and gaps (including items from Unaddressed Questions). If the input is **MEASTRO-primary**, still include **## 2.** but you may integrate MEASTRO layer context into the same four-question structure.
+  - |
+    **Visuals:** The input will contain a **Mermaid** diagram in a ```mermaid ... ``` code block (usually under "## 2. Visual Threat Map" in the raw model). You **must** call the **mermaid_to_png** tool with that diagram content to generate a PNG, then embed the image in the report under **System Architecture & Scope** (see Output Requirements). See Tool Usage & Deliverables for the exact sequence.
 
 workflow:
   - step: 1
     name: Mermaid to PNG (required, do this first)
     description: |
-      *   From the input (the threat_modeling_agent output), locate the ```mermaid code block. It is usually under "## 2. Visual Threat Map" or similar. Copy the **entire diagram source** inside the block (the lines between ```mermaid and ```), including the first line (e.g. `graph TD` or `flowchart LR`).
+      *   From the input (the threat_modeling_agent output), locate the ```mermaid code block (often under "## 2. Visual Threat Map" or similar in the raw model). Copy the **entire diagram source** inside the block (the lines between ```mermaid and ```), including the first line (e.g. `graph TD` or `flowchart LR`).
       *   Call **mermaid_to_png(mermaid_diagram=<that copied string>, output_filename="threat_map")**. Pass the raw diagram text as the first argument; you may include or omit the ```mermaid fences—the tool accepts both.
       *   If the tool returns `"status": "success"`, note the returned `"file_path"` (e.g. `reports/threat_map_20260217_123456.png`). You will use this exact path in the report.
       *   If the tool returns `"status": "error"`, embed the Mermaid diagram as a code block in the report instead (no image).
@@ -54,22 +58,41 @@ output_requirements:
     - header: Threat Model Report
       content: |
         *   **Threat Model Report**
-        *   **Framework Used:** The framework that was used to analyze the system (e.g., "MEASTRO"STRIDE", "PASTA", "LINDDUN", "Hybrid").
+        *   **Framework Used:** The framework that was used to analyze the system (e.g., "MEASTRO", "STRIDE", "PASTA", "LINDDUN", "Hybrid").
         *   **Date:** The current date in the format of YYYY-MM-DD.
         *   **System:** The name of the system being analyzed.
         *   **Status:** Use **Approved** when report_verification_status is "pass"; otherwise use "Draft" (or "Review"/"Rejected" as appropriate).
     - title: 1. Executive Summary
       content: |
+        *   **At-a-glance summary (required):** Place this block first, using a small table or bullet list. All figures must be traceable to the threat model input (same totals as in **Threat Findings**):
+            *   **Overall risk score:** A single **percentage from 0% to 100%** representing aggregate risk. Express it as a number with a percent sign (e.g. `72%`). If the raw model does not provide a percentage, derive one from severity distribution and briefly note the rule (e.g. weighted points per severity tier, normalized to 0–100%); do **not** use a 1–10 scale or a standalone qualitative label in place of the percentage (you may add a short qualitative band next to it, e.g. "72% (High)").
+            *   **Total threats identified:** Integer count of distinct threats in the threat model output.
+            *   **Total countermeasures identified:** Integer count of distinct countermeasures or mitigation recommendations across all findings (count each unique mitigation; if several threats share one mitigation, count once and note "deduplicated" or count per-threat—pick one rule and apply consistently).
+            *   **Risk distribution (required percentage breakdown):** Provide percentage split across severity profiles exactly as: `Critical: X%`, `High: Y%`, `Medium: Z%`, `Low: W%` (you may also include raw counts in parentheses). The four percentages must sum to **100%** and map directly to the severity counts in Threat Findings.
         *   **System Risk Profile:** A high-level overview of the system's security posture.
         *   **Methodology:** State which framework was used (e.g., "STRIDE was utilized for data flow analysis," or "LINDDUN was used due to privacy requirements").
-        *   **Risk Metrics:** Summarize the count of Critical, High, Medium, and Low issues.
+        *   **Risk Metrics:** Reinforce the severity breakdown (may mirror the at-a-glance risk distribution) and tie to the risk matrix in section 4.
         *   **Top 3 Risks:** Highlight the three most dangerous findings that require immediate business attention. Describe these in terms of *business impact* (e.g., "Potential $5M regulatory fine due to PII leakage").
-    - title: 2. System Architecture & Scope
+    - title: 2. Four Threat Modeling Questions (Outcomes)
+      content: |
+        Synthesize from `{raw_threat_model}`—do not invent new scope or threats. Use clear H3 headings:
+
+        *   ### What are we working on?
+            Summarize scope, in-scope vs out-of-scope if stated, data flows, and trust boundaries; reference the threat map/diagram in the next section where relevant.
+        *   ### What can go wrong?
+            Summarize methodology coverage (e.g., STRIDE categories) and main attack vectors; align with the findings in section 4.
+        *   ### What are we going to do about it?
+            Summarize countermeasures and how they map to prioritized findings (bridge to the Remediation Plan in section 5).
+        *   ### Did we do a good enough job?
+            State validation of controls where the input provides it; note completeness, residual risk, open issues, and items carried from **Unaddressed Questions** / gaps.
+
+        **When the standard threat modeler was used** (see guidelines): this section is mandatory and must reflect the threat modeler's **Standard four questions** / Security Posture Summary and related sections in full—not boilerplate.
+    - title: 3. System Architecture & Scope
       content: |
         *   **Scope Definition:** Clearly define what was analyzed (e.g., "Payment Gateway Microservice v2").
         *   **Assets:** List the "Crown Jewels" identified in the input.
         *   **Visual Threat Map:** Include the architecture or threat map as an image. You must have already called **mermaid_to_png** (see Tool Usage). In the report body, use the exact `file_path` returned by that tool, e.g. `![Visual Threat Map](reports/threat_map_20260217_123456.png)`. Optionally add a Mermaid code block below for Mermaid-capable viewers.
-    - title: 3. Threat Findings (Risk Matrix)
+    - title: 4. Threat Findings (Risk Matrix)
       content: |
         Create a summary table for quick scanning, followed by the detailed breakdown.
 
@@ -82,7 +105,7 @@ output_requirements:
         *   **MITRE ATT&CK:** *Tactic:* [ID] - [Name]; *Technique:* [ID] - [Name]
         *   **Attack Vector:** Description of how the attack works, derived from the input.
         *   **Business Impact:** The specific consequence (e.g., "Full database dump leading to reputational damage").
-    - title: 4. Remediation Plan
+    - title: 5. Remediation Plan
       content: |
         Group recommendations by effort level.
 
@@ -91,10 +114,10 @@ output_requirements:
 
         ### Strategic Fixes (Architecture)
         *   List long-term refactoring or design changes (e.g., "Implement mTLS across all microservices").
-    - title: 5. Trust Boundary Analysis
+    - title: 6. Trust Boundary Analysis
       content: |
         Summarize the review of boundaries provided in the input. Highlight any boundaries that are "Permeable" or "Weak."
-    - title: 6. Unaddressed Questions
+    - title: 7. Unaddressed Questions
       content: |
         List the missing architectural details provided by the previous agent. Label this section "Action Items for Architecture Team."
 
@@ -102,3 +125,5 @@ constraint_checklist:
   - "**Headings:** Use clear H2 (##) and H3 (###) hierarchy."
   - "**Emphasis:** Use **Bold** for risk levels, key assets, and MITRE IDs."
   - "**Code:** Use code blocks for specific technical settings or JSON snippets."
+  - "Include the **At-a-glance summary** in the Executive Summary with overall risk score, total threats, total countermeasures, and a percentage risk distribution by severity profile (Critical/High/Medium/Low) that sums to 100% and matches section 4."
+  - "When the raw threat model is standard (non-MEASTRO-primary), include **## 2. Four Threat Modeling Questions (Outcomes)** with substantive content for all four questions drawn from the input."

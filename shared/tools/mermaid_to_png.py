@@ -39,6 +39,10 @@ def _sanitize_mermaid_for_cli(diagram: str) -> str:
     )
     # Strip trailing non-ASCII after a valid #RRGGBB (e.g. #ff0000¶ß -> #ff0000)
     out = re.sub(r"#([0-9a-fA-F]{6})[^\x00-\x7F]+", r"#\1", out)
+
+    # Strip linkStyle directives which often contain invalid indices causing mermaid-cli to crash
+    out = re.sub(r"^\s*linkStyle\s+.*$", "", out, flags=re.MULTILINE)
+
     return out
 
 
@@ -125,8 +129,10 @@ def mermaid_to_png(mermaid_diagram: str, output_filename: str | None = None) -> 
                 "npx",
                 "-y",
                 "@mermaid-js/mermaid-cli",
-                "-i", str(temp_mmd),
-                "-o", str(output_path),
+                "-i",
+                str(temp_mmd),
+                "-o",
+                str(output_path),
             ],
             capture_output=True,
             text=True,

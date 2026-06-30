@@ -1,5 +1,27 @@
 # Run from project root: docker compose up --build
+# For local provider: docker compose up --build ollama app
+# For cloud providers: docker compose up --build app
+
 services:
+  # Ollama: local LLM inference (required when using 'local' provider in providers.json)
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    profiles:
+      - local
+    restart: unless-stopped
+
+  # App services (depend on ollama when provider=local)
   architecture_parser:
     build:
       context: .
@@ -15,6 +37,9 @@ services:
       GOOGLE_CLOUD_LOCATION: ${GOOGLE_CLOUD_LOCATION:-global}
     ports:
       - "8001:8001"
+    volumes:
+      - ./config:/app/config:ro
+    restart: unless-stopped
 
   threat_modeler:
     build:
@@ -31,6 +56,9 @@ services:
       GOOGLE_CLOUD_LOCATION: ${GOOGLE_CLOUD_LOCATION:-global}
     ports:
       - "8002:8002"
+    volumes:
+      - ./config:/app/config:ro
+    restart: unless-stopped
 
   report_builder:
     build:
@@ -47,6 +75,9 @@ services:
       GOOGLE_CLOUD_LOCATION: ${GOOGLE_CLOUD_LOCATION:-global}
     ports:
       - "8003:8003"
+    volumes:
+      - ./config:/app/config:ro
+    restart: unless-stopped
 
   report_verifier:
     build:
@@ -63,6 +94,9 @@ services:
       GOOGLE_CLOUD_LOCATION: ${GOOGLE_CLOUD_LOCATION:-global}
     ports:
       - "8004:8004"
+    volumes:
+      - ./config:/app/config:ro
+    restart: unless-stopped
 
   orchestrator:
     build:
@@ -84,6 +118,8 @@ services:
       - threat_modeler
       - report_builder
       - report_verifier
+    volumes:
+      - ./config:/app/config:ro
     restart: unless-stopped
 
   app:
@@ -107,6 +143,7 @@ services:
     volumes:
       - ./uploads:/app/uploads
       - ./reports:/app/reports
+      - ./config:/app/config:ro
     depends_on:
       - orchestrator
     restart: unless-stopped

@@ -6,10 +6,9 @@ Compiles threat model findings into a comprehensive, professional security repor
 
 import os
 
-from google.adk.agents import Agent
-
 from shared.tools.file_writer_tool import convert_markdown_to_pdf, write_file
 from shared.tools.mermaid_to_png import mermaid_to_png
+from shared.utils.agent_factory import create_agent
 from shared.utils.file_loader import load_instructions_file
 
 # Resolve paths relative to this file's directory
@@ -19,13 +18,13 @@ instructions_path = os.path.join(current_dir, "instructions.yaml")
 DEFAULT_MODEL = "gemini-3-flash-preview"
 MODEL_NAME = os.environ.get("GOOGLE_GENAI_MODEL", DEFAULT_MODEL)
 
-report_builder_agent = Agent(
+report_builder_agent = create_agent(
     name="report_builder_agent",
     description="Compiles threat model findings into a comprehensive, professional security report.",
     instruction=load_instructions_file(instructions_path),
     output_key="threat_model_report_content",
     model=MODEL_NAME,
-    tools=[write_file, convert_markdown_to_pdf, mermaid_to_png]
+    tools=[write_file, convert_markdown_to_pdf, mermaid_to_png],
 )
 
 root_agent = report_builder_agent

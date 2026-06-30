@@ -474,3 +474,11 @@ body {
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
+
+.optional-badge {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-weight: normal;
+  margin-left: 0.25rem;
+  opacity: 0.85;
+}

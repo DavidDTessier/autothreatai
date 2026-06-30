@@ -23,6 +23,11 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from PIL import Image
 from pydantic import BaseModel
 
+from shared.providers.registry import ProviderRegistry
+from shared.utils.security_validator import validate_input_safety
+
+_registry = ProviderRegistry.instance()
+
 # Add project root to path
 project_root = Path(__file__).parent.parent.absolute()
 if str(project_root) not in sys.path:
@@ -132,7 +137,7 @@ app = FastAPI(title="AutoThreat AI", lifespan=lifespan)
 app.add_middleware(
     # ⚠️ Whitelist specific origins - don't use ["*"] for production
     CORSMiddleware,
-    allow_origins=os.getenv("ALLOWED_ORIGINS", "http://localhost:8000").split(","), # Whitelist specific origins
+    allow_origins=os.getenv("ALLOWED_ORIGINS", "http://localhost:8000").split(","),  # Whitelist specific origins
     allow_credentials=True,
     allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["Content-Type", "Authorization"],
@@ -141,8 +146,8 @@ app.add_middleware(
 )
 
 # File upload validation
-ALLOWED_MIME_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp']
-ALLOWED_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.webp'}
+ALLOWED_MIME_TYPES = ["image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp"]
+ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
 # Temporary upload directory
@@ -208,7 +213,9 @@ async def serve_asset(filename: str):
     file_path = (assets_dir / filename).resolve()
     if not file_path.is_file() or not str(file_path).startswith(str(assets_dir.resolve())):
         raise HTTPException(status_code=404, detail="Not found")
-    media_type = "text/css" if filename.endswith(".css") else "application/javascript" if filename.endswith(".js") else None
+    media_type = (
+        "text/css" if filename.endswith(".css") else "application/javascript" if filename.endswith(".js") else None
+    )
     headers = {"Cache-Control": "public, max-age=0"} if media_type else None
     return FileResponse(str(file_path), media_type=media_type, headers=headers)
 
@@ -234,7 +241,7 @@ async def create_session():
                     "threat_model_orchestrator",
                     "threat_modeller_orchestrator",
                     "orchestrator",
-                    "threat_model_orchestrator_agent"
+                    "threat_model_orchestrator_agent",
                 ]
 
                 for candidate in orchestrator_candidates:
@@ -250,8 +257,17 @@ async def create_session():
                             logger.info("Session created successfully with agent: %s", candidate)
                             return result
                         else:
-                            error_text = session_response.text[:500] if session_response.text else str(session_response.status_code)
-                            logger.warning("Failed to create session with %s: %s - %s", candidate, session_response.status_code, error_text)
+                            error_text = (
+                                session_response.text[:500]
+                                if session_response.text
+                                else str(session_response.status_code)
+                            )
+                            logger.warning(
+                                "Failed to create session with %s: %s - %s",
+                                candidate,
+                                session_response.status_code,
+                                error_text,
+                            )
     except Exception as e:
         logger.warning("Could not list apps, trying direct connection: %s", e)
 
@@ -278,22 +294,26 @@ async def create_session():
     # If we get here, both attempts failed
     raise HTTPException(
         status_code=503,
-        detail=f"Cannot connect to orchestrator. Tried both {AGENT_NAME} and {AGENT_NAME_ALT}. Check that the orchestrator is running on {ORCHESTRATOR_URL} and accessible."
+        detail=f"Cannot connect to orchestrator. Tried both {AGENT_NAME} and {AGENT_NAME_ALT}. Check that the orchestrator is running on {ORCHESTRATOR_URL} and accessible.",
     )
 
 
 class QueryRequest(BaseModel):
     """Request model for query endpoint."""
+
     user_id: str = "web_user"
     session_id: str
     message: str | None = ""  # Optional text message (for backward compatibility)
     message_parts: list[dict[str, Any]] | None = []  # Optional list of message parts (text or inlineData)
-    # Google Gemini: API key and/or Vertex AI (required)
+    # Provider selection
+    provider_id: str | None = None  # e.g. "gemini", "anthropic", "local"
+    # Model within provider (optional for providers with multiple models)
+    model_id: str | None = None
+    # Google Gemini / Anthropic credentials (optional depending on provider)
     api_key: str | None = None
     use_vertex: bool | None = False
     vertex_project: str | None = None
     vertex_location: str | None = None
-    model_id: str | None = None  # Gemini model (e.g. gemini-3-flash-preview)
 
 
 @app.post("/api/query")
@@ -320,32 +340,30 @@ async def stream_query(request: QueryRequest):
         logger.info("Using message_parts: %d parts", len(message_parts))
         for i, part in enumerate(message_parts):
             if "text" in part:
-                logger.info("Part %d: text (%d chars)", i, len(part.get("text", "")))
+                text_content = part.get("text", "")
+                # Validate text content for safety
+                safe, error_msg = validate_input_safety(text_content)
+                if not safe:
+                    raise HTTPException(status_code=400, detail=error_msg)
+                logger.info("Part %d: safe text (%d chars)", i, len(text_content))
             elif "inlineData" in part:
                 mime_type = part.get("inlineData", {}).get("mimeType", "unknown")
                 logger.info("Part %d: inlineData (%s)", i, mime_type)
     elif request.message:
         # Fallback to text-only message
         message_parts = [{"text": request.message}]
-        logger.info("Using text message: %d chars", len(request.message))
+        # Validate the combined text for safety
+        safe, error_msg = validate_input_safety(request.message)
+        if not safe:
+            raise HTTPException(status_code=400, detail=error_msg)
+        logger.info("Using safe text message: %d chars", len(request.message))
 
     if not message_parts:
         raise HTTPException(status_code=400, detail="Either 'message' or 'message_parts' must be provided")
 
-    # Require either Google API key or Vertex AI
-    has_api_key = bool(request.api_key and request.api_key.strip())
-    has_vertex = bool(
-        request.use_vertex
-        and request.vertex_project
-        and request.vertex_project.strip()
-        and request.vertex_location
-        and request.vertex_location.strip()
-    )
-    if not has_api_key and not has_vertex:
-        raise HTTPException(
-            status_code=400,
-            detail="Credentials required: provide either a Google API key or Vertex AI (check 'Use Vertex AI' and fill Project ID and Location).",
-        )
+    # Provider‑specific credential checks – defer to the provider implementation.
+    # The provider itself (or agent overrides) will validate; we let it fall through
+    # so that the orchestrator can use its configured keys.
 
     request_payload_creds: dict[str, Any] = {}
     if request.api_key:
@@ -360,48 +378,73 @@ async def stream_query(request: QueryRequest):
         request_payload_creds["model_id"] = request.model_id.strip()
 
     # Set API key / Vertex / model on orchestrator and all agent processes (ADK reads from env)
-    if request_payload_creds:
-        base = ORCHESTRATOR_URL.rstrip("/").rsplit(":", 1)[0] if ":" in ORCHESTRATOR_URL else "http://localhost"
-        set_key_urls = [f"{base}:{port}/set-api-key" for port in (8001, 8002, 8003, 8004, 8005)]
-        orch_url = f"{ORCHESTRATOR_URL.rstrip('/')}/set-api-key"
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as set_client:
-                for set_key_url in set_key_urls:
-                    try:
-                        r = await set_client.post(set_key_url, json=request_payload_creds)
-                        if r.status_code == 200:
-                            logger.info("set-api-key succeeded: %s", set_key_url)
-                        else:
-                            if set_key_url == orch_url:
-                                logger.error("set-api-key orchestrator failed: %s %s", r.status_code, r.text[:300])
-                                raise HTTPException(
-                                    status_code=503,
-                                    detail=(
-                                        "Orchestrator could not accept API key. "
-                                        "If using Docker, rebuild the orchestrator: docker compose build orchestrator"
-                                    ),
-                                )
-                            logger.warning("set-api-key %s returned %s", set_key_url, r.status_code)
-                    except HTTPException:
-                        raise
-                    except Exception as e:
+    agent_port_map = {
+        8001: "parser",
+        8002: "modeler",
+        8003: "meastro",
+        8004: "builder",
+        8005: "verifier",
+        8006: "orchestrator",
+    }
+
+    base = ORCHESTRATOR_URL.rstrip("/").rsplit(":", 1)[0] if ":" in ORCHESTRATOR_URL else "http://localhost"
+    orch_url = f"{base}:8006/set-api-key"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as set_client:
+            for port, agent_id in agent_port_map.items():
+                set_key_url = f"{base}:{port}/set-api-key"
+
+                # Start with global payload
+                agent_payload = request_payload_creds.copy()
+
+                # Merge in agent-specific overrides if present
+                agent_config = _registry.get_config_for_agent(agent_id)
+                if agent_config:
+                    if "api_key" not in agent_payload and agent_config.api_key:
+                        agent_payload["api_key"] = agent_config.api_key
+                    if "model_id" not in agent_payload and agent_config.default_model:
+                        agent_payload["model_id"] = agent_config.default_model
+
+                # Only send if there is something to send
+                if not agent_payload:
+                    continue
+
+                try:
+                    r = await set_client.post(set_key_url, json=agent_payload)
+                    if r.status_code == 200:
+                        logger.info("set-api-key succeeded: %s with config from %s", set_key_url, agent_id)
+                    else:
                         if set_key_url == orch_url:
+                            logger.error("set-api-key orchestrator failed: %s %s", r.status_code, r.text[:300])
                             raise HTTPException(
                                 status_code=503,
                                 detail=(
-                                    f"Cannot set API key on orchestrator: {e!s}. "
-                                    "If using Docker, ensure orchestrator is running and rebuilt."
+                                    "Orchestrator could not accept API key. "
+                                    "If using Docker, rebuild the orchestrator: docker compose build orchestrator"
                                 ),
-                            ) from e
-                        logger.debug("set-api-key %s failed: %s", set_key_url, e)
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error("set-api-key request failed: %s", e)
-            raise HTTPException(
-                status_code=503,
-                detail=f"Cannot set API key on orchestrator: {e!s}. If using Docker, ensure orchestrator is running and rebuilt."
-            ) from e
+                            )
+                        logger.warning("set-api-key %s returned %s", set_key_url, r.status_code)
+                except HTTPException:
+                    raise
+                except Exception as e:
+                    if set_key_url == orch_url:
+                        raise HTTPException(
+                            status_code=503,
+                            detail=(
+                                f"Cannot set API key on orchestrator: {e!s}. "
+                                "If using Docker, ensure orchestrator is running and rebuilt."
+                            ),
+                        ) from e
+                    logger.debug("set-api-key %s failed: %s", set_key_url, e)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("set-api-key request failed: %s", e)
+        raise HTTPException(
+            status_code=503,
+            detail=f"Cannot set API key on orchestrator: {e!s}. If using Docker, ensure orchestrator is running and rebuilt.",
+        ) from e
 
     client = httpx.AsyncClient(timeout=300.0)
     try:
@@ -424,15 +467,21 @@ async def stream_query(request: QueryRequest):
                         text = part["text"]
                         preview_parts.append(f"text: {text[:30]}..." if len(text) > 30 else f"text: {text}")
                     elif "inlineData" in part:
-                        mime_type = part["inlineData"].get("mimeType", "unknown")  # pyright: ignore[reportAttributeAccessIssue]
+                        inline_data = part.get("inlineData") or {}
+                        mime_type = (
+                            inline_data.get("mimeType", "unknown") if isinstance(inline_data, dict) else "unknown"
+                        )
                         preview_parts.append(f"image: {mime_type}")
 
-                logger.info("Sending request to orchestrator with payload: %s", {
-                    "app_name": request_payload["app_name"],
-                    "user_id": request_payload["user_id"],
-                    "session_id": request_payload["session_id"],
-                    "message_parts": preview_parts,
-                })
+                logger.info(
+                    "Sending request to orchestrator with payload: %s",
+                    {
+                        "app_name": request_payload["app_name"],
+                        "user_id": request_payload["user_id"],
+                        "session_id": request_payload["session_id"],
+                        "message_parts": preview_parts,
+                    },
+                )
 
                 async with client.stream(
                     "POST",
@@ -453,7 +502,7 @@ async def stream_query(request: QueryRequest):
                                 error_chunks.append(chunk)
                             if error_chunks:
                                 error_body = b"".join(error_chunks)
-                                error_text = error_body.decode('utf-8', errors='replace')
+                                error_text = error_body.decode("utf-8", errors="replace")
                         except Exception as e:
                             logger.warning("Could not read error body: %s", e)
 
@@ -469,7 +518,7 @@ async def stream_query(request: QueryRequest):
                             if chunk:
                                 # Decode and yield immediately - no buffering
                                 try:
-                                    decoded = chunk.decode('utf-8', errors='replace')
+                                    decoded = chunk.decode("utf-8", errors="replace")
                                     yield decoded
                                 except UnicodeDecodeError:
                                     # Skip invalid UTF-8 sequences
@@ -493,7 +542,7 @@ async def stream_query(request: QueryRequest):
                 "Connection": "keep-alive",
                 "X-Accel-Buffering": "no",
                 "X-Content-Type-Options": "nosniff",
-            }
+            },
         )
     except HTTPException:
         raise
@@ -527,14 +576,15 @@ async def upload_file(file: UploadFile = File(...)):
 
         # Check file size
         if len(contents) > MAX_FILE_SIZE:
-            raise HTTPException(status_code=413, detail=f"File too large. Maximum size is {MAX_FILE_SIZE / (1024*1024):.0f}MB")
+            raise HTTPException(
+                status_code=413, detail=f"File too large. Maximum size is {MAX_FILE_SIZE / (1024 * 1024):.0f}MB"
+            )
 
         # Validate file extension
         file_ext = Path(file.filename).suffix.lower() if file.filename else ""
         if file_ext not in ALLOWED_EXTENSIONS:
             raise HTTPException(
-                status_code=400,
-                detail=f"Invalid file type. Allowed types: {', '.join(ALLOWED_EXTENSIONS)}"
+                status_code=400, detail=f"Invalid file type. Allowed types: {', '.join(ALLOWED_EXTENSIONS)}"
             )
 
         # Validate MIME type from file content using Pillow
@@ -544,12 +594,12 @@ async def upload_file(file: UploadFile = File(...)):
 
             # Get actual format from Pillow
             img_format = img.format.lower() if img.format else ""
-            valid_formats = {'png', 'jpeg', 'jpg', 'gif', 'webp'}
+            valid_formats = {"png", "jpeg", "jpg", "gif", "webp"}
 
             if img_format not in valid_formats:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Invalid image format detected: {img_format}. Allowed formats: {', '.join(valid_formats)}"
+                    detail=f"Invalid image format detected: {img_format}. Allowed formats: {', '.join(valid_formats)}",
                 )
 
             # Reopen image after verify() (verify() closes the image)
@@ -561,19 +611,19 @@ async def upload_file(file: UploadFile = File(...)):
             if width > max_dimension or height > max_dimension:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Image dimensions too large. Maximum: {max_dimension}x{max_dimension} pixels"
+                    detail=f"Image dimensions too large. Maximum: {max_dimension}x{max_dimension} pixels",
                 )
 
             # Validate MIME type matches file extension
             mime_type_map = {
-                'png': 'image/png',
-                'jpeg': 'image/jpeg',
-                'jpg': 'image/jpeg',
-                'gif': 'image/gif',
-                'webp': 'image/webp'
+                "png": "image/png",
+                "jpeg": "image/jpeg",
+                "jpg": "image/jpeg",
+                "gif": "image/gif",
+                "webp": "image/webp",
             }
 
-            detected_mime = mime_type_map.get(img_format, '')
+            detected_mime = mime_type_map.get(img_format, "")
             if detected_mime not in ALLOWED_MIME_TYPES:
                 raise HTTPException(status_code=400, detail="MIME type validation failed")
 
@@ -597,7 +647,7 @@ async def upload_file(file: UploadFile = File(...)):
         # Save file with secure permissions (optional, for audit trail)
         # In production, you might want to store these temporarily and clean up
         try:
-            with open(file_path, 'wb') as f:
+            with open(file_path, "wb") as f:
                 f.write(contents)
             # Set restrictive permissions (owner read/write only)
             os.chmod(file_path, 0o600)
@@ -606,19 +656,21 @@ async def upload_file(file: UploadFile = File(...)):
             # Continue even if save fails - we still have contents in memory
 
         # Convert to base64 for use in message_parts
-        base64_data = base64.b64encode(contents).decode('utf-8')
+        base64_data = base64.b64encode(contents).decode("utf-8")
 
         logger.info("File uploaded successfully: %s (%d bytes, %s)", file.filename, len(contents), detected_mime)
 
-        return JSONResponse({
-            "status": "success",
-            "mimeType": detected_mime,
-            "data": base64_data,
-            "filename": file.filename,  # Original filename
-            "serverFilename": safe_filename,  # Server-side filename for cleanup
-            "size": len(contents),
-            "dimensions": {"width": width, "height": height}
-        })
+        return JSONResponse(
+            {
+                "status": "success",
+                "mimeType": detected_mime,
+                "data": base64_data,
+                "filename": file.filename,  # Original filename
+                "serverFilename": safe_filename,  # Server-side filename for cleanup
+                "size": len(contents),
+                "dimensions": {"width": width, "height": height},
+            }
+        )
 
     except HTTPException:
         raise
@@ -637,7 +689,7 @@ async def delete_uploaded_file(filename: str):
     """
     try:
         # Validate filename to prevent path traversal
-        if not filename.startswith('upload_') or '..' in filename or '/' in filename or '\\' in filename:
+        if not filename.startswith("upload_") or ".." in filename or "/" in filename or "\\" in filename:
             raise HTTPException(status_code=400, detail="Invalid filename")
 
         # Normalize path and ensure it's within uploads directory
@@ -656,10 +708,7 @@ async def delete_uploaded_file(filename: str):
         try:
             file_path.unlink()
             logger.info("Deleted uploaded file: %s", filename)
-            return JSONResponse({
-                "status": "success",
-                "message": f"File {filename} deleted successfully"
-            })
+            return JSONResponse({"status": "success", "message": f"File {filename} deleted successfully"})
         except OSError as e:
             logger.error("Error deleting file %s: %s", filename, e)
             raise HTTPException(status_code=500, detail="Failed to delete file") from e
@@ -681,24 +730,207 @@ async def health():
 RUNNING_IN_CONTAINER = os.environ.get("RUNNING_IN_CONTAINER", "").strip().lower() in ("1", "true", "yes")
 
 
+async def fetch_local_models():
+    """Fetch available models from local Ollama instance."""
+    models = []
+    try:
+        async with httpx.AsyncClient(timeout=2.0) as client:
+            response = await client.get("http://localhost:11434/api/tags")
+            if response.status_code == 200:
+                data = response.json()
+                for model in data.get("models", []):
+                    name = model.get("name")
+                    if name:
+                        models.append({"id": f"local/{name}", "label": f"Local: {name}", "provider": "local"})
+    except Exception as e:
+        logger.debug(f"Could not fetch local models (Ollama not running or unreachable): {e}")
+    return models
+
+
 @app.get("/api/config")
 async def get_config():
-    """Frontend config: vertex available (local only), supported Gemini models."""
+    """Frontend config: includes provider list and vertex availability."""
+    # Provider list from registry (includes id, name, enabled, default_model, etc.)
+    providers = [
+        {
+            "id": p.id,
+            "name": p.name,
+            "provider": p.id,  # same as id for UI grouping
+            "default_model": p.default_model,
+            "enabled": p.enabled,
+        }
+        for p in _registry.list_providers()
+    ]
     return {
         "vertex_available": not RUNNING_IN_CONTAINER,
-        "supported_models": [
-            {"id": "gemini-3-flash-preview", "label": "Gemini 3 Flash Preview (Default)"},
-            {"id": "gemini-3-pro-preview", "label": "Gemini 3 Pro Preview"},
-            {"id": "gemini-2.5-pro", "label": "Gemini 2.5 Pro"},
-            {"id": "gemini-flash-latest", "label": "Gemini 2.5 Flash Latest (09 2025)"},
-            {"id": "gemini-flash-lite-latest", "label": "Gemini 2.5 Flash Lite Latest (09 2025)"},
-            {"id": "gemini-2.5-flash", "label": "Gemini 2.5 Flash"},
-            {"id": "gemini-2.5-flash-lite", "label": "Gemini 2.5 Flash Lite"},
-            {"id": "gemini-2.0-flash", "label": "Gemini 2.0 Flash"},
-            {"id": "gemini-2.0-flash-lite", "label": "Gemini 2.0 Flash Lite"},
-        ],
-        "default_model_id": "gemini-3-flash-preview",
+        "providers": providers,
+        "default_provider": _registry.default_provider(),
     }
+
+
+@app.get("/api/providers")
+async def get_providers():
+    """Return list of configured model providers for the UI."""
+    providers = [
+        {
+            "id": p.id,
+            "name": p.name,
+            "default_model": p.default_model,
+            "enabled": p.enabled,
+        }
+        for p in _registry.list_providers()
+    ]
+    return {"providers": providers, "default_provider": _registry.default_provider()}
+
+
+# Provider config update endpoint – allows UI to edit API keys, base URLs, etc.
+class ProviderConfigUpdate(BaseModel):
+    provider_id: str
+    api_key: str | None = None
+    base_url: str | None = None
+    default_model: str | None = None
+    enabled: bool | None = None
+
+
+class AgentProviderConfigUpdate(BaseModel):
+    agent_id: str
+    provider_id: str | None = None
+    api_key: str | None = None
+    base_url: str | None = None
+    default_model: str | None = None
+    enabled: bool | None = None
+
+
+class ValidateCredentialRequest(BaseModel):
+    provider_id: str
+    api_key: str | None = None
+    base_url: str | None = None
+
+
+@app.post("/api/provider-config")
+@app.post("/api/agent-provider-config")
+async def update_agent_provider_config(update: AgentProviderConfigUpdate):
+    """Update per‑agent provider overrides in ``config/providers.json``.
+    The JSON structure is ``agent_overrides`` → ``agent_id`` → provider fields.
+    """
+    config_path = project_root / "config" / "providers.json"
+    if not config_path.exists():
+        raise HTTPException(status_code=500, detail="Provider config file missing")
+    # Load existing config
+    with open(config_path, encoding="utf-8") as f:
+        data = json.load(f)
+    overrides = data.get("agent_overrides", {})
+    agent_id = update.agent_id
+    # Prepare the override dict
+    ov = overrides.get(agent_id, {})
+    if update.provider_id is not None:
+        ov["provider_id"] = update.provider_id
+    if update.api_key is not None:
+        ov["api_key"] = update.api_key
+    if update.base_url is not None:
+        ov["base_url"] = update.base_url
+    if update.default_model is not None:
+        ov["default_model"] = update.default_model
+    if update.enabled is not None:
+        ov["enabled"] = update.enabled
+    overrides[agent_id] = ov
+    data["agent_overrides"] = overrides
+    # Write back
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+    # Reload registry to pick up changes
+    global _registry
+    _registry = ProviderRegistry.instance()
+    # Return refreshed overrides for debugging
+    return {"agent_id": agent_id, "override": ov}
+
+
+@app.post("/api/validate-credential")
+async def validate_credential(request: ValidateCredentialRequest):
+    """Validate API key format for a provider before accepting config updates."""
+    provider_id = request.provider_id
+    api_key = request.api_key
+
+    # Basic validation
+    if provider_id not in ["gemini", "anthropic", "local"]:
+        raise HTTPException(status_code=400, detail=f"Unknown provider: {provider_id}")
+
+    # Provider-specific validation
+    if provider_id == "gemini":
+        if not api_key or not api_key.strip():
+            return {"valid": False, "error": "API key required for Google Gemini"}
+        # Check format (basic check)
+        if not api_key.startswith("AIza"):
+            return {"valid": False, "error": "Gemini API key should start with 'AIza'"}
+        return {"valid": True, "provider": "gemini"}
+
+    elif provider_id == "anthropic":
+        if not api_key or not api_key.strip():
+            return {"valid": False, "error": "API key required for Anthropic"}
+        # Check format (basic check)
+        if not api_key.startswith("sk-ant-"):
+            return {"valid": False, "error": "Anthropic API key should start with 'sk-ant-'"}
+        return {"valid": True, "provider": "anthropic"}
+
+    elif provider_id == "local":
+        # Local Ollama doesn't require an API key
+        return {"valid": True, "provider": "local", "note": "Local provider - no API key required"}
+
+    return {"valid": False, "error": "Unknown provider"}
+
+
+@app.post("/api/provider-config")
+async def update_provider_config(update: ProviderConfigUpdate):
+    """Update a provider's configuration and persist to config/providers.json.
+
+    Returns the refreshed list of providers.
+    """
+    config_path = project_root / "config" / "providers.json"
+    if not config_path.exists():
+        raise HTTPException(status_code=500, detail="Provider config file missing")
+
+    # Load existing config
+    with open(config_path, encoding="utf-8") as f:
+        data = json.load(f)
+
+    providers = data.get("providers", [])
+    found = False
+    for p in providers:
+        if p.get("id") == update.provider_id:
+            found = True
+            # Update mutable fields only if supplied
+            if update.api_key is not None:
+                p["api_key"] = update.api_key
+            if update.base_url is not None:
+                p["base_url"] = update.base_url
+            if update.default_model is not None:
+                p["default_model"] = update.default_model
+            if update.enabled is not None:
+                p["enabled"] = update.enabled
+            break
+    if not found:
+        raise HTTPException(status_code=400, detail=f"Unknown provider id: {update.provider_id}")
+
+    # Write back
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+    # Reload registry to pick up new settings
+    # Re‑instantiate the singleton (simple way: create a new instance)
+    global _registry
+    _registry = ProviderRegistry.instance()  # instance will reload on next call because config changed
+
+    # Return refreshed list
+    refreshed = [
+        {
+            "id": p.get("id"),
+            "name": p.get("name"),
+            "default_model": p.get("default_model"),
+            "enabled": p.get("enabled", True),
+        }
+        for p in data.get("providers", [])
+    ]
+    return {"providers": refreshed, "default_provider": data.get("default_provider")}
 
 
 @app.get("/api/reports/latest-pdf")
@@ -719,7 +951,7 @@ async def get_latest_pdf():
     return {
         "file_path": str(latest_pdf.relative_to(project_root)),
         "filename": latest_pdf.name,
-        "created": latest_pdf.stat().st_mtime
+        "created": latest_pdf.stat().st_mtime,
     }
 
 
@@ -727,27 +959,25 @@ async def get_latest_pdf():
 async def download_report(filename: str):
     """Download a report file."""
     # Security: Only allow PDF files from reports directory
-    if not filename.endswith('.pdf') or not filename.startswith('report_'):
+    if not filename.endswith(".pdf") or not filename.startswith("report_"):
         raise HTTPException(status_code=400, detail="Invalid filename")
 
-     # Normalize path and ensure it's within reports directory
+    # Normalize path and ensure it's within reports directory
     file_path = (project_root / "reports" / filename).resolve()
     reports_dir = (project_root / "reports").resolve()
 
-     # Prevent path traversal
+    # Prevent path traversal
     if not str(file_path).startswith(str(reports_dir)):
         raise HTTPException(status_code=403, detail="Access denied")
 
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found")
 
-    return FileResponse(
-        path=str(file_path),
-        filename=filename,
-        media_type="application/pdf"
-    )
+    return FileResponse(path=str(file_path), filename=filename, media_type="application/pdf")
+
 
 if __name__ == "__main__":
     import uvicorn
+
     port = int(os.getenv("PORT", "8000"))
     uvicorn.run(app, host="0.0.0.0", port=port)

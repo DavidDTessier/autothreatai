@@ -6,6 +6,7 @@ try:
 except ImportError:
     yaml = None
 
+
 def load_file_content(file_path: str, fallback: str = None) -> str:
     """
     Generic utility to load the content of a text file.
@@ -21,7 +22,7 @@ def load_file_content(file_path: str, fallback: str = None) -> str:
         str: The contents of the file or fallback.
     """
     try:
-        with open(file_path, encoding='utf-8') as f:
+        with open(file_path, encoding="utf-8") as f:
             return f.read().strip()
     except (OSError, FileNotFoundError) as e:
         if fallback is not None:
@@ -29,6 +30,7 @@ def load_file_content(file_path: str, fallback: str = None) -> str:
             return fallback
         logging.error(f"Error reading file {file_path}: {e}")
         raise
+
 
 def _build_instruction_from_yaml(data: dict) -> str:
     """
@@ -63,7 +65,10 @@ def _build_instruction_from_yaml(data: dict) -> str:
             if oreq.get("sections"):
                 for sec in oreq["sections"]:
                     if isinstance(sec, dict):
-                        parts.append(f"\n  {sec.get('title', 'Section')}:\n  " + (sec.get("content") or "").strip().replace("\n", "\n  "))
+                        parts.append(
+                            f"\n  {sec.get('title', 'Section')}:\n  "
+                            + (sec.get("content") or "").strip().replace("\n", "\n  ")
+                        )
                     else:
                         parts.append(f"  - {sec}")
             if oreq.get("constraint_checklist"):
@@ -105,5 +110,3 @@ def load_instructions_file(file_path: str, fallback: str = "Perform your tasks a
             logging.warning(f"Failed to parse YAML instructions from {file_path}: {e}. Using fallback.")
             return fallback or load_file_content(file_path, fallback=fallback)
     return load_file_content(file_path, fallback=fallback)
-
-

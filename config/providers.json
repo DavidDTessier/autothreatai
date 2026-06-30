@@ -1,0 +1,30 @@
+{
+  "default_provider": "gemini",
+  "providers": [
+    {
+      "id": "gemini",
+      "name": "Google Gemini",
+      "base_url": "https://generativelanguage.googleapis.com/v1beta",
+      "api_key": "",
+      "default_model": "gemini-3-flash-preview",
+      "enabled": true
+    },
+    {
+      "id": "anthropic",
+      "name": "Anthropic",
+      "base_url": "https://api.anthropic.com",
+      "api_key": "",
+      "default_model": "claude-sonnet-4-6",
+      "enabled": true
+    },
+    {
+      "id": "local",
+      "name": "Local Ollama",
+      "base_url": "",
+      "api_key": "",
+      "default_model": "llama3",
+      "enabled": true
+    }
+  ],
+  "agent_overrides": {}
+}

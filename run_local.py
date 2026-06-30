@@ -30,10 +30,7 @@ if str(project_root) not in sys.path:
 load_dotenv()
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 # Agent configuration
@@ -50,7 +47,7 @@ AGENTS = [
         "port": 8002,
         "a2a": True,
     },
-     {
+    {
         "name": "MEASTRO Threat Modeler",
         "dir": "agents/meastro_threat_modeler",
         "port": 8003,
@@ -89,12 +86,7 @@ def kill_existing_processes():
     try:
         # Use lsof to find processes on these ports - check each port individually
         for port in ports:
-            result = subprocess.run(
-                ["lsof", "-ti", f":{port}"],
-                capture_output=True,
-                text=True,
-                check=False
-            )
+            result = subprocess.run(["lsof", "-ti", f":{port}"], capture_output=True, text=True, check=False)
             if result.stdout.strip():
                 pids = result.stdout.strip().split("\n")
                 for pid in pids:
@@ -207,7 +199,7 @@ except ImportError:
 '''
 
     # All agents: add set-api-key so server can set API key / Vertex / model (ADK uses env)
-    set_api_key_extra = '''
+    set_api_key_extra = """
 # Allow server to set API key / Vertex / model from frontend (ADK uses env)
 import os
 from fastapi import Request
@@ -227,19 +219,14 @@ async def set_api_key(request: Request):
     if model_id:
         os.environ["GOOGLE_GENAI_MODEL"] = model_id
     return {"ok": True}
-'''
+"""
     wrapper_module_content = wrapper_module_content.rstrip() + set_api_key_extra + "\n"
 
     # Write the wrapper module to a temp file
     wrapper_file = project_root / "app" / f"_agent_wrapper_{agent_name}.py"
     wrapper_file.write_text(wrapper_module_content)
 
-    cmd = [
-        "uv", "run", "uvicorn",
-        f"app._agent_wrapper_{agent_name}:app",
-        "--host", "0.0.0.0",
-        "--port", str(port)
-    ]
+    cmd = ["uv", "run", "uvicorn", f"app._agent_wrapper_{agent_name}:app", "--host", "0.0.0.0", "--port", str(port)]
 
     try:
         # Start the process - don't capture output so we can see errors in real-time
@@ -253,7 +240,7 @@ async def set_api_key(request: Request):
                 cwd=str(project_root),  # Run from project root for proper imports
                 stdout=f,
                 stderr=subprocess.STDOUT,  # Combine stderr with stdout
-                env=env
+                env=env,
             )
 
         # Check if process started successfully - wait a bit longer for startup
@@ -351,12 +338,7 @@ def start_fastapi_app() -> subprocess.Popen | None:
 
     # Check if port is available
     try:
-        result = subprocess.run(
-            ["lsof", "-ti", ":8000"],
-            capture_output=True,
-            text=True,
-            check=False
-        )
+        result = subprocess.run(["lsof", "-ti", ":8000"], capture_output=True, text=True, check=False)
         if result.stdout.strip():
             logger.warning("Port 8000 is already in use. Existing process may need to be stopped.")
             # Don't return None - let it try anyway, uvicorn will handle the error
@@ -375,11 +357,15 @@ def start_fastapi_app() -> subprocess.Popen | None:
     try:
         # Start the FastAPI app directly using uvicorn
         cmd = [
-            "uv", "run", "uvicorn",
+            "uv",
+            "run",
+            "uvicorn",
             "app.server:app",
-            "--host", "0.0.0.0",
-            "--port", "8000",
-            "--reload"  # Enable reload for development
+            "--host",
+            "0.0.0.0",
+            "--port",
+            "8000",
+            "--reload",  # Enable reload for development
         ]
 
         # Use a log file for the FastAPI app
@@ -392,7 +378,7 @@ def start_fastapi_app() -> subprocess.Popen | None:
                 cwd=str(project_root),  # Run from project root for proper imports
                 stdout=f,
                 stderr=subprocess.STDOUT,  # Combine stderr with stdout
-                env=env
+                env=env,
             )
 
         # Wait a bit for the process to start
@@ -498,10 +484,7 @@ def main():
     if not os.getenv("GOOGLE_CLOUD_PROJECT"):
         try:
             result = subprocess.run(
-                ["gcloud", "config", "get-value", "project"],
-                capture_output=True,
-                text=True,
-                check=False
+                ["gcloud", "config", "get-value", "project"], capture_output=True, text=True, check=False
             )
             if result.returncode == 0 and result.stdout.strip():
                 os.environ["GOOGLE_CLOUD_PROJECT"] = result.stdout.strip()

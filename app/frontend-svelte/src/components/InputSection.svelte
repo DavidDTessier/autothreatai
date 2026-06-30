@@ -1,15 +1,15 @@
 <script>
-  export let architectureText = '';
+  export let architectureText = "";
   export let uploadedFile = null;
   export let isAnalyzing = false;
   export let canReset = false;
-  export let apiKey = '';
+  export let apiKey = "";
   export let useVertex = false;
-  export let vertexProject = '';
-  export let vertexLocation = 'us-central1';
-  export let selectedModelId = '';
-  /** @type {{ id: string; label: string }[]} */
-  export let supportedModels = [];
+  export let vertexProject = "";
+  export let vertexLocation = "us-central1";
+  export let selectedProviderId = "";
+  /** @type {{ id: string; name: string; default_model?: string; enabled: boolean }[]} */
+  export let providers = [];
   export let vertexAvailable = true;
   /** @type {() => void} */
   export let onAnalyze = () => {};
@@ -19,35 +19,38 @@
   export let onRemoveFile = () => {};
 
   let fileInput;
-  let fileName = '';
-  let fileSizeText = '';
+  let fileName = "";
+  let fileSizeText = "";
   const MAX_SIZE_MB = 10;
   const MAX_BYTES = MAX_SIZE_MB * 1024 * 1024;
 
   $: hasFile = !!uploadedFile;
-  $: uploadLabelText = hasFile ? 'Change Diagram' : 'Upload Reference Diagram (Optional)';
+  $: isLocalSelected = selectedProviderId?.startsWith("local");
+  $: uploadLabelText = hasFile
+    ? "Change Diagram"
+    : "Upload Reference Diagram (Optional)";
   $: if (!uploadedFile) {
-    fileName = '';
-    fileSizeText = '';
+    fileName = "";
+    fileSizeText = "";
   }
 
   function handleFileChange(e) {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      alert('Please select an image file');
-      if (fileInput) fileInput.value = '';
+    if (!file.type.startsWith("image/")) {
+      alert("Please select an image file");
+      if (fileInput) fileInput.value = "";
       return;
     }
     if (file.size > MAX_BYTES) {
       alert(`File size must be less than ${MAX_SIZE_MB}MB`);
-      if (fileInput) fileInput.value = '';
+      if (fileInput) fileInput.value = "";
       return;
     }
     uploadedFile = file;
     fileName = file.name;
-    fileSizeText = (file.size / (1024 * 1024)).toFixed(2) + ' MB';
-    if (fileInput) fileInput.value = '';
+    fileSizeText = (file.size / (1024 * 1024)).toFixed(2) + " MB";
+    if (fileInput) fileInput.value = "";
   }
 
   function triggerFileInput() {
@@ -56,9 +59,9 @@
 
   function removeFile() {
     uploadedFile = null;
-    fileName = '';
-    fileSizeText = '';
-    if (fileInput) fileInput.value = '';
+    fileName = "";
+    fileSizeText = "";
+    if (fileInput) fileInput.value = "";
     onRemoveFile();
   }
 
@@ -79,29 +82,40 @@
     ></textarea>
 
     <div class="credentials-section">
-      <p class="credentials-heading">Credentials (required — provide Google API key or Vertex AI)</p>
-      {#if supportedModels.length > 0}
+      <p class="credentials-heading">
+        {#if isLocalSelected}
+          Credentials (optional for local models)
+        {:else}
+          Credentials (required — provide Google API key or Vertex AI)
+        {/if}
+      </p>
+      {#if providers.length > 0}
         <div class="credentials-row">
-          <label for="model-select-svelte">Gemini Model</label>
+          <label for="provider-select-svelte">Provider</label>
           <select
-            id="model-select-svelte"
-            bind:value={selectedModelId}
+            id="provider-select-svelte"
+            bind:value={selectedProviderId}
             disabled={isAnalyzing}
-            class="model-select"
+            class="provider-select"
           >
-            {#each supportedModels as m}
-              <option value={m.id}>{m.label}</option>
+            {#each providers as p}
+              <option value={p.id}>{p.name}</option>
             {/each}
           </select>
         </div>
       {/if}
       <div class="credentials-row">
-        <label for="api-key-svelte">Google API Key</label>
+        <label for="api-key-svelte"
+          >Google API Key{#if isLocalSelected}
+            <span class="optional-badge">(Optional)</span>{/if}</label
+        >
         <input
           id="api-key-svelte"
           type="password"
           bind:value={apiKey}
-          placeholder="Google/Gemini API key"
+          placeholder={isLocalSelected
+            ? "Not needed for local models"
+            : "Google/Gemini API key"}
           autocomplete="off"
           disabled={isAnalyzing}
         />
@@ -109,7 +123,11 @@
       {#if vertexAvailable}
         <div class="credentials-row vertex-toggle">
           <label class="checkbox-label">
-            <input type="checkbox" bind:checked={useVertex} disabled={isAnalyzing} />
+            <input
+              type="checkbox"
+              bind:checked={useVertex}
+              disabled={isAnalyzing}
+            />
             <span>Use Vertex AI</span>
           </label>
         </div>
@@ -148,7 +166,7 @@
         class="file-upload-label"
         class:file-selected={hasFile}
         on:click={triggerFileInput}
-        on:keydown={(e) => e.key === 'Enter' && triggerFileInput()}
+        on:keydown={(e) => e.key === "Enter" && triggerFileInput()}
       >
         <span class="file-upload-icon">📎</span>
         <span class="file-upload-text">{uploadLabelText}</span>
@@ -171,8 +189,18 @@
             </div>
           </div>
           <div class="file-actions">
-            <button type="button" class="btn-update-file" title="Replace file" on:click={updateFile}>🔄</button>
-            <button type="button" class="btn-remove-file" title="Remove file" on:click={removeFile}>×</button>
+            <button
+              type="button"
+              class="btn-update-file"
+              title="Replace file"
+              on:click={updateFile}>🔄</button
+            >
+            <button
+              type="button"
+              class="btn-remove-file"
+              title="Remove file"
+              on:click={removeFile}>×</button
+            >
           </div>
         </div>
       {/if}
@@ -187,11 +215,7 @@
         <span class="btn-icon">🚀</span>
         <span class="btn-text">Start Analysis</span>
       </button>
-      <button
-        class="btn btn-secondary"
-        disabled={!canReset}
-        on:click={onReset}
-      >
+      <button class="btn btn-secondary" disabled={!canReset} on:click={onReset}>
         <span class="btn-icon">🔄</span>
         <span class="btn-text">Reset</span>
       </button>
